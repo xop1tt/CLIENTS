@@ -1,0 +1,6 @@
+{"version": 0.6, "elements": [
+  {"type": "node", "id": 1001, "lat": 55.79, "lon": 49.12, "tags": {"name": "Салон Ромашка", "shop": "beauty", "phone": "+7 843 000-00-01", "addr:city": "Казань", "addr:street": "улица Баумана", "addr:housenumber": "1"}},
+  {"type": "way", "id": 2002, "center": {"lat": 55.8, "lon": 49.1}, "tags": {"name": "Barber Old", "shop": "hairdresser", "website": "http://old-barber.example", "phone": "+7 843 000-00-02"}},
+  {"type": "node", "id": 1003, "lat": 55.7, "lon": 49.2, "tags": {"name": "Студия Модерн", "shop": "beauty", "website": "https://modern.example", "contact:phone": "+7 843 000-00-03"}},
+  {"type": "node", "id": 1004, "lat": 55.7, "lon": 49.2, "tags": {"shop": "beauty"}}
+]}
