@@ -1,0 +1,17 @@
+# Данные и состояние — НИКОГДА не коммитить в публичный репозиторий
+state/
+backup/
+*.db
+*.db.enc
+*.sqlite
+*.csv
+leads*.json
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
