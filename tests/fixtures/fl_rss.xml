@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+<channel>
+<title>Тестовая лента заказов</title>
+<link>https://www.fl.ru/</link>
+<description>Синтетические данные для тестов</description>
+<item>
+  <title>Нужен Telegram-бот для записи клиентов (Бюджет: 25000 руб)</title>
+  <link>https://www.fl.ru/projects/1000001/bot.html</link>
+  <guid>https://www.fl.ru/projects/1000001/bot.html</guid>
+  <description><![CDATA[Ищем разработчика. Нужен телеграм-бот для салона красоты: запись клиентов, напоминания, интеграция с Google таблицами. Бюджет 25 000 руб. Срочно. Подробное ТЗ есть, пишите на test@example.com]]></description>
+  <pubDate>{NOW_RFC822}</pubDate>
+  <category>Разработка ботов</category>
+</item>
+<item>
+  <title>Сделаю сайт недорого</title>
+  <link>https://www.fl.ru/projects/1000002/offer.html</link>
+  <guid>https://www.fl.ru/projects/1000002/offer.html</guid>
+  <description>Сделаю сайт на тильде, моё портфолио по ссылке, беру заказы.</description>
+  <pubDate>{NOW_RFC822}</pubDate>
+</item>
+<item>
+  <title>Нарисовать логотип</title>
+  <link>https://www.fl.ru/projects/1000003/logo.html</link>
+  <guid>https://www.fl.ru/projects/1000003/logo.html</guid>
+  <description>Требуется дизайнер для логотипа кофейни.</description>
+  <pubDate>{NOW_RFC822}</pubDate>
+</item>
+</channel>
+</rss>

@@ -1,0 +1,10 @@
+[project]
+name = "leadgen"
+version = "0.1.0"
+description = "Автономный бесплатный поиск потенциальных заказчиков на разработку"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
