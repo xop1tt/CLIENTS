@@ -77,7 +77,23 @@ def test_per_email_daily_limit():
     assert r.status_code == 429 and r.json()["reason"] == "email_daily"
 
 
+def _timezone_with_day_started_hours_ago(hours: int = 2) -> str:
+    """Часовой пояс, в котором текущие сутки идут уже не меньше `hours` часов.
+
+    Тест сдвигает записи на час назад внутри суток. В первый час суток по Москве
+    (21:00–22:00 UTC) это невозможно, и тест падал в зависимости от времени запуска.
+    Среди трёх поясов ниже в любой момент хотя бы в одном сутки идут больше двух часов.
+    """
+    with db() as d:
+        for tz in ("Europe/Moscow", "UTC", "Asia/Tokyo"):
+            if d.execute("select now() - private.day_start(%s) >= make_interval(hours => %s)", (tz, hours)).fetchone()[0]:
+                return tz
+    raise AssertionError("не нашлось подходящего часового пояса")
+
+
 def test_device_hourly_and_daily_limits():
+    tz = _timezone_with_day_started_hours_ago()
+    set_limits(day_timezone=tz)
     dev = Client()
     for _ in range(3):
         assert dev.gate("recovery", unique_email()).status_code == 200
@@ -86,7 +102,7 @@ def test_device_hourly_and_daily_limits():
     # Через час лимит часа снова пускает, но действует суточный (5).
     with db() as d:
         d.execute("update private.email_requests set created_at = greatest(created_at - interval '61 minutes', "
-                  "private.day_start('Europe/Moscow') + interval '1 second')")
+                  "private.day_start(%s) + interval '1 second')", (tz,))
     assert dev.gate("recovery", unique_email()).status_code == 200
     assert dev.gate("recovery", unique_email()).status_code == 200
     r = dev.gate("recovery", unique_email())
