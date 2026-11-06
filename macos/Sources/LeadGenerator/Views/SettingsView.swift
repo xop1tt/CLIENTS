@@ -3,20 +3,73 @@ import LeadGenCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct SettingsView: View {
-    var body: some View {
-        TabView {
-            AppearanceSettingsView().tabItem { Label("Внешний вид", systemImage: "paintpalette") }
-            SearchSettingsView().tabItem { Label("Поиск", systemImage: "magnifyingglass") }
-            AccountSettingsView().tabItem { Label("Учётная запись", systemImage: "person.crop.circle") }
-            DataSettingsView().tabItem { Label("Данные", systemImage: "externaldrive") }
-            ExclusionsSettingsView().tabItem { Label("Исключения", systemImage: "nosign") }
-            OutreachSettingsView().tabItem { Label("Обращения", systemImage: "text.bubble") }
-            ReportSettingsView().tabItem { Label("Отчёты", systemImage: "ladybug") }
-            UpdateSettingsView().tabItem { Label("Обновления", systemImage: "arrow.down.circle") }
+/// Разделы настроек. Список слева вместо вкладок на панели инструментов: при восьми
+/// вкладках macOS не всегда отрисовывал кнопки (оставался пустой квадрат), а список
+/// помещает любое число разделов.
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case appearance, search, account, data, exclusions, outreach, reports, updates
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .appearance: return "Внешний вид"
+        case .search: return "Поиск"
+        case .account: return "Учётная запись"
+        case .data: return "Данные"
+        case .exclusions: return "Исключения"
+        case .outreach: return "Обращения"
+        case .reports: return "Отчёты"
+        case .updates: return "Обновления"
         }
-        .frame(width: 680)
-        .frame(minHeight: 520)
+    }
+    var icon: String {
+        switch self {
+        case .appearance: return "paintpalette"
+        case .search: return "magnifyingglass"
+        case .account: return "person.crop.circle"
+        case .data: return "externaldrive"
+        case .exclusions: return "nosign"
+        case .outreach: return "text.bubble"
+        case .reports: return "ladybug"
+        case .updates: return "arrow.down.circle"
+        }
+    }
+}
+
+struct SettingsView: View {
+    @AppStorage("settings.section") private var selectedRaw = SettingsSection.appearance.rawValue
+
+    private var selected: SettingsSection { SettingsSection(rawValue: selectedRaw) ?? .appearance }
+
+    var body: some View {
+        NavigationSplitView {
+            List(selection: Binding(get: { Optional(selected) }, set: { if let s = $0, s != selected { selectedRaw = s.rawValue } })) {
+                ForEach(SettingsSection.allCases) { s in
+                    Label(s.title, systemImage: s.icon).tag(s)
+                }
+            }
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(190)
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .navigationTitle(selected.title)
+        }
+        .frame(minWidth: 820, idealWidth: 860, minHeight: 560, idealHeight: 620)
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch selected {
+        case .appearance: AppearanceSettingsView()
+        case .search: SearchSettingsView()
+        case .account: AccountSettingsView()
+        case .data: DataSettingsView()
+        case .exclusions: ExclusionsSettingsView()
+        case .outreach: OutreachSettingsView()
+        case .reports: ReportSettingsView()
+        case .updates: UpdateSettingsView()
+        }
     }
 }
 

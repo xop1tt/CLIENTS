@@ -35,6 +35,29 @@ jobs:
         working-directory: macos
         run: swift test
 
+      # Постоянная подпись своим сертификатом (секреты MACOS_SIGN_P12 и MACOS_SIGN_PASSWORD,
+      # создаются скриптом macos/scripts/make-signing-certificate.sh). Без секретов — ad-hoc подпись.
+      - name: Signing certificate
+        env:
+          P12: ${{ secrets.MACOS_SIGN_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
+        run: |
+          if [ -z "$P12" ]; then echo "Сертификат не задан: подпись ad-hoc"; exit 0; fi
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KC_PW="$(uuidgen)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/sign.p12"
+          security create-keychain -p "$KC_PW" "$KC"
+          security set-keychain-settings -lut 3600 "$KC"
+          security unlock-keychain -p "$KC_PW" "$KC"
+          security import "$RUNNER_TEMP/sign.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KC_PW" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/sign.p12"
+          ID="$(security find-identity -p codesigning "$KC" | awk '/\)/ {print $2; exit}')"
+          if [ -z "$ID" ]; then echo "::warning::В сертификате нет ключа подписи кода"; exit 0; fi
+          echo "LEADGEN_SIGN_IDENTITY=$ID" >> "$GITHUB_ENV"
+          echo "LEADGEN_SIGN_KEYCHAIN=$KC" >> "$GITHUB_ENV"
+
       - name: Build app
         working-directory: macos
         env:

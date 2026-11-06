@@ -57,11 +57,18 @@ public struct ReleaseInfo: Decodable, Sendable {
     public let draft: Bool
     public let prerelease: Bool
     public let assets: [Asset]
+    /// Дата публикации в формате ISO 8601 (у черновиков её нет).
+    public let publishedAt: String?
+
+    public var publishedDate: Date? { publishedAt.flatMap { ISO8601DateFormatter().date(from: $0) } }
+    /// Название для списка: «Lead Generator 1.0.6» или тег, если названия нет.
+    public var title: String { (name?.isEmpty == false ? name : nil) ?? tagName }
 
     enum CodingKeys: String, CodingKey {
         case name, body, draft, prerelease, assets
         case tagName = "tag_name"
         case htmlURL = "html_url"
+        case publishedAt = "published_at"
     }
 }
 
@@ -107,6 +114,25 @@ public enum Updates {
     public static let repository = "xop1tt/CLIENTS"
     public static let latestReleaseURL = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
     public static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!
+    public static let wikiPage = URL(string: "https://github.com/\(repository)/wiki")!
+    static let recentReleasesURL = URL(string: "https://api.github.com/repos/\(repository)/releases?per_page=10")!
+
+    /// Последние опубликованные релизы, новые сначала (без черновиков и предварительных версий).
+    public static func recent(from releases: [ReleaseInfo], limit: Int = 3) -> [ReleaseInfo] {
+        Array(releases.filter { !$0.draft && !$0.prerelease }.prefix(limit))
+    }
+
+    /// Список релизов из публичного API, для раздела «Что нового?».
+    public static func fetchRecent(userAgent: String, limit: Int = 3, session: URLSession = .shared) async throws -> [ReleaseInfo] {
+        var r = URLRequest(url: recentReleasesURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        r.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        r.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
+        r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+        let (data, resp) = try await session.data(for: r)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200 else { throw UpdateError.badResponse(code) }
+        return recent(from: try JSONDecoder().decode([ReleaseInfo].self, from: data), limit: limit)
+    }
 
     /// Есть ли в релизе версия новее установленной.
     public static func update(from release: ReleaseInfo, current: AppVersion) -> AvailableUpdate? {
