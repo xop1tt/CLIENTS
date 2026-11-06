@@ -21,9 +21,9 @@ sources:
     enabled: true
     interval_hours: 3
     # Публичные каналы с заказами (имя после t.me/). Канал должен иметь веб-превью t.me/s/<имя>.
-    # Список сознательно пуст: добавьте проверенные вами каналы, например:
-    # channels: [some_freelance_orders, another_channel]
-    channels: []
+    # Каналы выбраны владельцем (крупные каналы про фриланс/удалёнку; доля просмотров от подписчиков
+    # публично недоступна — её видят только админы канала).
+    channels: [teleworko, vacanciesbest, freetasks, theyseeku]
     max_pages_per_channel: 3
     prefilter_keywords: [сайт, бот, приложени, разработ, программист, автоматизац, crm, срм, парсер, интеграц,
                          лендинг, верстк, доработ, интернет-магазин, telegram, телеграм, python, api]

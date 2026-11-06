@@ -29,7 +29,10 @@ def build_query(area: dict[str, Any], tag_filters: list[str], timeout: int = 60)
     admin = area.get("admin_level")
     admin_part = f'["admin_level"="{int(admin)}"]' if admin else ""
     body = "".join(f"nwr{flt}(area.a);" for flt in tag_filters)
-    return (f'[out:json][timeout:{timeout}];area["name"="{name}"]["boundary"="administrative"]{admin_part}->.a;'
+    # Название города в OSM часто на местном языке (Ереван — «Երևան»), поэтому ищем и по name:ru/name:en
+    alt = "".join(f'area["{k}"="{name}"]["boundary"="administrative"]{admin_part}->.a{i};'
+                  for i, k in enumerate(("name", "name:ru", "name:en")))
+    return (f"[out:json][timeout:{timeout}];{alt}(.a0;.a1;.a2;)->.a;"
             f"({body});out center tags;")
 
 

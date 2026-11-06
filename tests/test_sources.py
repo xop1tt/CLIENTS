@@ -112,6 +112,11 @@ def test_overpass_query_builder():
     assert '["name"="Казань"]' in q and '["admin_level"="4"]' in q and 'nwr["shop"="beauty"](area.a);' in q
 
 
+def test_overpass_query_matches_localized_names():
+    q = build_query({"name": "Ереван"}, ['["shop"="beauty"]'])
+    assert '["name:ru"="Ереван"]' in q and '["name"="Ереван"]' in q and "(.a0;.a1;.a2;)->.a;" in q
+
+
 def test_osm_facts_site_checks_and_quota_economy(store, no_network):
     overpass = no_network.post("https://overpass-api.de/api/interpreter").mock(
         return_value=httpx.Response(200, text=load_fixture("overpass_beauty.json")))
