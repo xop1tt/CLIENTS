@@ -59,7 +59,9 @@ def test_automerge_only_for_dependabot_patch_minor_without_checkout():
 
 
 def test_elevated_permissions_only_in_expected_jobs():
-    allowed = {"release.yml": {"release"}, "dependabot-automerge.yml": {"automerge"}, "wiki.yml": {"publish"}}
+    allowed = {"release.yml": {"release"}, "dependabot-automerge.yml": {"automerge"}, "wiki.yml": {"publish"},
+               # CodeQL загружает результаты во вкладку Security.
+               "codeql.yml": {"analyze"}, "codeql-swift.yml": {"analyze"}}
     for f in WF.glob("*.yml"):
         wf = yaml.safe_load(f.read_text(encoding="utf-8"))
         for name, job in wf["jobs"].items():
@@ -73,3 +75,13 @@ def test_wiki_publishes_only_from_main():
     assert set(on) == {"push", "workflow_dispatch"}
     assert on["push"]["branches"] == ["main"]
     assert wf["jobs"]["publish"]["permissions"] == {"contents": "write"}
+
+
+def test_codeql_swift_not_on_pull_requests():
+    # Swift-анализ идёт ~15 минут на macOS: в PR его нет, только main/расписание/вручную.
+    on = load("codeql-swift.yml")[True]
+    assert "pull_request" not in on and "pull_request_target" not in on
+    assert set(on) == {"push", "schedule", "workflow_dispatch"}
+    fast = load("codeql.yml")
+    assert "pull_request" in fast[True]
+    assert "swift" not in fast["jobs"]["analyze"]["strategy"]["matrix"]["language"]
