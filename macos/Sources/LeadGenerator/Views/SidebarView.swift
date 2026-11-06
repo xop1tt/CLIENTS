@@ -5,7 +5,6 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(\.appModel) private var model
     @Environment(\.look) private var look
-    @Environment(\.openSettings) private var openSettings
     @Environment(\.session) private var session
     @AppStorage("sidebar.hidden") private var hiddenRaw = ""
 
@@ -58,7 +57,7 @@ struct SidebarView: View {
                 }
             }
             Divider()
-            footer
+            SidebarFooter(model: model, session: session, look: look)
         }
     }
 
@@ -83,37 +82,5 @@ struct SidebarView: View {
             } icon: { Image(systemName: s.icon) }
             .tag(s)
         }
-    }
-
-    private var footer: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "person.crop.circle.fill").font(.system(size: 22 * look.scale)).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.displayName).appFont(12, .semibold)
-                if model.searching {
-                    Text(model.searchProgress ?? "Идёт поиск…").appFont(11).foregroundStyle(.secondary)
-                } else {
-                    Text(model.lastSearchAt.map { "Поиск: \($0.shortRelative)" } ?? "Поиск ещё не запускался")
-                        .appFont(11).foregroundStyle(.secondary)
-                }
-                if let sync = session.sync {
-                    Label(sync.summary, systemImage: sync.icon).appFont(11).foregroundStyle(.secondary)
-                }
-            }
-            .lineLimit(1)
-            Spacer()
-            if model.searching { ProgressView().controlSize(.small) }
-            Menu {
-                Button("Настройки…") { openSettings() }
-                if let sync = session.sync { Button("Синхронизировать сейчас") { sync.syncNow() } }
-                Divider()
-                Button("Выйти") { session.logout() }
-            } label: { Image(systemName: "ellipsis.circle") }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-        }
-        .scaledPadding(.horizontal, 12)
-        .frame(height: 52 * look.scale)
     }
 }

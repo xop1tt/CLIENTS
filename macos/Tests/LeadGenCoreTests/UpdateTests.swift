@@ -96,3 +96,24 @@ final class FourPartVersionTests: XCTestCase {
         XCTAssertLessThan(AppVersion("1.0.6.1")!, AppVersion("1.0.7")!)
     }
 }
+
+final class RecentReleasesTests: XCTestCase {
+    func testOnlyPublishedAndLimited() throws {
+        let json = """
+        [{"tag_name": "v1.0.8", "name": null, "draft": true, "prerelease": false, "assets": []},
+         {"tag_name": "v1.0.7", "name": "Lead Generator 1.0.7", "draft": false, "prerelease": false, "assets": [],
+          "published_at": "2026-11-06T21:00:00Z"},
+         {"tag_name": "v1.0.7-beta", "name": "beta", "draft": false, "prerelease": true, "assets": []},
+         {"tag_name": "v1.0.6.1", "name": "", "draft": false, "prerelease": false, "assets": []},
+         {"tag_name": "v1.0.6", "name": "Lead Generator 1.0.6", "draft": false, "prerelease": false, "assets": []},
+         {"tag_name": "v1.0.5", "name": "Lead Generator 1.0.5", "draft": false, "prerelease": false, "assets": []}]
+        """
+        let all = try JSONDecoder().decode([ReleaseInfo].self, from: Data(json.utf8))
+        let recent = Updates.recent(from: all)
+        XCTAssertEqual(recent.map(\.tagName), ["v1.0.7", "v1.0.6.1", "v1.0.6"])
+        XCTAssertEqual(recent[0].title, "Lead Generator 1.0.7")
+        XCTAssertEqual(recent[1].title, "v1.0.6.1")
+        XCTAssertNotNil(recent[0].publishedDate)
+        XCTAssertNil(recent[1].publishedDate)
+    }
+}

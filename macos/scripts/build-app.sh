@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT="${1:-build}"
-VERSION="${LEADGEN_VERSION:-1.0.6.1}"
+VERSION="${LEADGEN_VERSION:-1.0.7}"
 
 ARCH_FLAGS=()
 if [[ "${UNIVERSAL:-0}" == "1" ]]; then ARCH_FLAGS=(--arch arm64 --arch x86_64); fi
@@ -66,7 +66,16 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 # Тёмный вариант: приложение ставит его в Dock, когда в macOS включена тёмная тема.
 sips -z 512 512 Resources/AppIcon-Dark-1024.png --out "$APP/Contents/Resources/AppIcon-Dark.png" >/dev/null
 
-# Локальная (ad-hoc) подпись: без платного Apple Developer ID. При первом запуске скачанной сборки
+# Подпись. Платного Apple Developer ID нет, поэтому при первом запуске скачанной сборки
 # macOS попросит подтверждение: правый клик по приложению → «Открыть».
-codesign --force --deep --sign - "$APP"
+# LEADGEN_SIGN_IDENTITY — собственный (самоподписанный) сертификат: с ним подпись одинакова у всех
+# версий, и Связка ключей не спрашивает пароль после каждого обновления. Без него — ad-hoc подпись,
+# которая у каждой сборки своя.
+SIGN_ID="${LEADGEN_SIGN_IDENTITY:--}"
+if [ "$SIGN_ID" != "-" ] && ! codesign --force --deep --sign "$SIGN_ID" ${LEADGEN_SIGN_KEYCHAIN:+--keychain "$LEADGEN_SIGN_KEYCHAIN"} "$APP"; then
+  echo "::warning::Не удалось подписать сертификатом, используется ad-hoc подпись" >&2
+  SIGN_ID="-"
+fi
+if [ "$SIGN_ID" = "-" ]; then codesign --force --deep --sign - "$APP"; fi
+codesign -dr - "$APP" 2>&1 | sed 's/^/Требование подписи: /' || true
 echo "Готово: $APP"

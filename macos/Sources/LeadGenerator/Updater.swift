@@ -23,6 +23,11 @@ final class UpdateController {
 
     private(set) var phase: Phase = .idle
     private(set) var lastCheck: Date?
+    /// Три последних релиза для раздела «Что нового?» (nil — ещё не загружались).
+    private(set) var recentReleases: [ReleaseInfo]?
+    private(set) var recentFailed = false
+    @ObservationIgnored private var recentLoadedAt: Date?
+    @ObservationIgnored private var recentLoading = false
 
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private var timer: Timer?
@@ -67,6 +72,24 @@ final class UpdateController {
 
     private init() {
         lastCheck = defaults.object(forKey: Self.lastKey) as? Date
+    }
+
+    // MARK: Что нового
+
+    /// Загружает список последних релизов, не чаще раза в 6 часов (после ошибки — раз в 10 минут).
+    func refreshRecentReleases(force: Bool = false) {
+        guard !recentLoading else { return }
+        if !force, let at = recentLoadedAt, Date().timeIntervalSince(at) < (recentFailed ? 600 : 6 * 3600) { return }
+        recentLoading = true
+        Task {
+            defer { recentLoading = false; recentLoadedAt = Date() }
+            do {
+                recentReleases = try await Updates.fetchRecent(userAgent: "LeadGenerator/\(current?.description ?? "dev") (macOS)")
+                recentFailed = false
+            } catch {
+                recentFailed = true
+            }
+        }
     }
 
     // MARK: Проверка
