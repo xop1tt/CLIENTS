@@ -72,7 +72,7 @@ public enum Normalize {
     }
 }
 
-/// Человекочитаемые названия источников конвейера и честные условия доступа.
+/// Человекочитаемые названия источников и честные условия доступа.
 public enum SourceCatalog {
     public struct Info: Sendable {
         public let title: String
@@ -81,12 +81,12 @@ public enum SourceCatalog {
     }
 
     public static let known: [String: Info] = [
-        "fl_ru": Info(title: "FL.ru", access: "Бесплатно",
-                      note: "Публичная RSS-лента. Хранит только последние записи."),
+        "fl_ru": Info(title: "FL.ru и RSS", access: "Бесплатно",
+                      note: "Публичные RSS-ленты заказов: FL.ru и любые другие. Ленты хранят только последние записи."),
         "telegram_channels": Info(title: "Telegram-каналы", access: "Бесплатно",
                                   note: "Только публичные каналы с веб-превью t.me/s. Bot API чужие каналы не читает."),
         "vk_communities": Info(title: "VK-сообщества", access: "Бесплатный ключ",
-                               note: "Нужен сервисный ключ VK. Читаются стены выбранных сообществ."),
+                               note: "Нужен бесплатный сервисный ключ VK (dev.vk.com). Читаются стены выбранных сообществ."),
         "osm_organizations": Info(title: "OpenStreetMap", access: "Бесплатно",
                                   note: "Overpass API, данные ODbL (© участники OpenStreetMap). Полнота в РФ ниже, чем у Яндекса и 2ГИС."),
         "site_checker": Info(title: "Проверка сайтов", access: "Бесплатно",

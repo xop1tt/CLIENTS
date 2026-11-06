@@ -7,7 +7,8 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             AppearanceSettingsView().tabItem { Label("Внешний вид", systemImage: "paintpalette") }
-            SyncSettingsView().tabItem { Label("Синхронизация", systemImage: "arrow.triangle.2.circlepath") }
+            SearchSettingsView().tabItem { Label("Поиск", systemImage: "magnifyingglass") }
+            AccountSettingsView().tabItem { Label("Учётная запись", systemImage: "person.crop.circle") }
             DataSettingsView().tabItem { Label("Данные", systemImage: "externaldrive") }
             ExclusionsSettingsView().tabItem { Label("Исключения", systemImage: "nosign") }
             OutreachSettingsView().tabItem { Label("Обращения", systemImage: "text.bubble") }
@@ -151,69 +152,81 @@ private struct PreviewRow: View {
     }
 }
 
-// MARK: - Синхронизация
+// MARK: - Поиск
 
-struct SyncSettingsView: View {
+struct SearchSettingsView: View {
     @Environment(AppModel.self) private var model
-    @State private var token = ""
-    @State private var secret = ""
-    @State private var saved = false
 
     var body: some View {
         @Bindable var model = model
         Form {
             Section {
-                Text("Поиск выполняется по расписанию в GitHub Actions. После каждого запуска он публикует зашифрованную копию базы, а приложение скачивает её, расшифровывает на этом Mac и добавляет новые лиды в локальную базу. Ваши избранное, архив, заметки и удаления синхронизация не трогает.")
+                Text("Поиск идёт прямо на этом Mac: приложение само обращается к источникам, без GitHub и без своего сервера. Источники, ключевые слова, каналы и регионы настраиваются в разделе «Источники».")
                     .font(.callout).foregroundStyle(.secondary)
             }
-            Section("Репозиторий") {
-                TextField("Владелец", text: $model.githubOwner)
-                TextField("Репозиторий", text: $model.githubRepo)
-                TextField("Ветка", text: $model.githubBranch)
-            }
-            Section("Доступ (хранится в Связке ключей)") {
-                SecureField("Токен GitHub", text: $token, prompt: Text(model.hasToken ? "сохранён" : "github_pat_…"))
-                Text("Fine-grained токен только для этого репозитория. Права: Actions — Read and write (скачивание результатов и запуск поиска). Создать: github.com → Settings → Developer settings → Fine-grained tokens.")
-                    .font(.caption).foregroundStyle(.secondary)
-                SecureField("Ключ шифрования состояния", text: $secret, prompt: Text(model.hasSecret ? "сохранён" : "значение STATE_ENCRYPTION_KEY"))
-                Text("То же значение, что в секрете STATE_ENCRYPTION_KEY репозитория. Без него зашифрованную базу не прочитать.")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button("Сохранить") {
-                        if !token.isEmpty { Keychain.set("github.token", token.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                        if !secret.isEmpty { Keychain.set("state.secret", secret.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                        token = ""; secret = ""; saved = true
-                    }
-                    .disabled(token.isEmpty && secret.isEmpty)
-                    Button("Удалить из Связки ключей", role: .destructive) {
-                        Keychain.set("github.token", ""); Keychain.set("state.secret", ""); saved = false
-                    }
-                    Spacer()
-                    if saved { Label("Сохранено", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
-                }
-            }
             Section("Автоматически") {
-                Picker("Проверять новые результаты", selection: $model.autoSyncMinutes) {
+                Picker("Проверять источники", selection: $model.autoSearchMinutes) {
                     Text("Выключено").tag(0)
                     Text("Каждые 15 минут").tag(15)
                     Text("Каждые 30 минут").tag(30)
                     Text("Каждый час").tag(60)
                     Text("Каждые 3 часа").tag(180)
                 }
-                Text("Поиск в Actions идёт раз в час; источники проверяются со своими интервалами.")
+                Text("Пока приложение открыто, оно проверяет только те источники, у которых подошёл их интервал. Кнопка «Найти лиды» проверяет все включённые источники сразу.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 HStack {
-                    Button("Синхронизировать сейчас") { Task { await model.syncNow(force: true) } }
-                        .disabled(!model.syncConfigured || model.syncing)
-                    Button("Запустить поиск в Actions") { Task { await model.dispatchSearch() } }
-                        .disabled(!model.githubConfig.isComplete || !model.hasToken)
+                    Button(model.searching ? "Остановить поиск" : "Найти лиды сейчас") {
+                        if model.searching { model.stopSearch() } else { model.runSearch() }
+                    }
                     Spacer()
-                    if model.syncing { ProgressView().controlSize(.small) }
+                    if model.searching { ProgressView().controlSize(.small) }
                 }
-                if let e = model.lastError { Text(e).font(.caption).foregroundStyle(.red) }
-                if let at = model.lastSyncAt { Text("Последняя синхронизация: \(at.fullRu)").font(.caption).foregroundStyle(.secondary) }
+                if let at = model.lastSearchAt { Text("Последний поиск: \(at.fullRu)").font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Учётная запись
+
+struct AccountSettingsView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(SessionModel.self) private var session
+    @State private var old = ""
+    @State private var new = ""
+    @State private var again = ""
+    @State private var result: String?
+    @State private var ok = false
+
+    var body: some View {
+        Form {
+            Section("Пользователь") {
+                LabeledContent("Имя пользователя", value: model.username)
+                Toggle("Запомнить вход на этом Mac", isOn: Binding(get: { session.remembered }, set: { session.setRemembered($0) }))
+                Button("Выйти из учётной записи") { session.logout() }
+            }
+            Section("Сменить пароль") {
+                SecureField("Текущий пароль", text: $old)
+                SecureField("Новый пароль", text: $new)
+                SecureField("Повторите новый пароль", text: $again)
+                HStack {
+                    Button("Сменить пароль") {
+                        result = session.changePassword(old: old, new: new, confirm: again)
+                        ok = result == nil
+                        if ok { old = ""; new = ""; again = "" }
+                    }
+                    .disabled(old.isEmpty || new.isEmpty)
+                    Spacer()
+                    if ok { Label("Пароль изменён", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
+                }
+                if let result { Text(result).font(.caption).foregroundStyle(.red) }
+            }
+            Section {
+                Text("Учётные записи сейчас хранятся только на этом Mac, у каждого пользователя своя база лидов и свои настройки поиска. Восстановить забытый пароль нельзя — делайте резервные копии базы.")
+                    .font(.callout).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -272,7 +285,7 @@ struct DataSettingsView: View {
                 }
             }
             Section("Перенос на другой Mac") {
-                Text("Скопируйте файл базы (или любую резервную копию) на новый Mac и выберите его в «Восстановить из файла…». Токен и ключ шифрования в копию не попадают — введите их заново.")
+                Text("Скопируйте файл базы (или любую резервную копию) на новый Mac и выберите его в «Восстановить из файла…». Ключ VK в копию не попадает — введите его заново в разделе «Источники».")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }

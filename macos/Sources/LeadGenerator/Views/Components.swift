@@ -1,4 +1,5 @@
 import LeadGenCore
+import LeadSearch
 import SwiftUI
 
 enum Palette {
@@ -141,4 +142,143 @@ extension Date {
 func durationText(_ t: TimeInterval) -> String {
     let s = Int(t)
     return s >= 60 ? "\(s / 60) мин \(s % 60) с" : "\(s) с"
+}
+
+/// Список значений (ключевые слова, каналы, ленты, регионы): добавление по одному,
+/// несколькими через запятую или целым списком.
+struct TokenListEditor: View {
+    let title: String
+    let placeholder: String
+    @Binding var items: [String]
+    var normalize: (String) -> String?
+    var invalidHint: String?
+
+    @State private var input = ""
+    @State private var bulkShown = false
+    @State private var bulkText = ""
+    @State private var rejected: [String] = []
+    @State private var confirmClear = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(title)
+                Text("\(items.count)").foregroundStyle(.secondary).monospacedDigit()
+                Spacer()
+                Button("Списком…") { bulkText = ""; bulkShown = true }
+                    .help("Вставить сразу много значений: по одному в строке или через запятую")
+                if !items.isEmpty {
+                    Button("Очистить") { confirmClear = true }
+                }
+            }
+            HStack {
+                TextField(placeholder, text: $input)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { add(input); input = "" }
+                Button("Добавить") { add(input); input = "" }
+                    .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if !rejected.isEmpty {
+                Text("Не добавлено: \(rejected.joined(separator: ", "))" + (invalidHint.map { ". \($0)" } ?? ""))
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            if items.isEmpty {
+                Text("Пока пусто").font(.callout).foregroundStyle(.secondary)
+            } else {
+                FlowLayout(spacing: 6) {
+                    ForEach(items, id: \.self) { item in
+                        HStack(spacing: 4) {
+                            Text(item).lineLimit(1)
+                            Button { items.removeAll { $0 == item } } label: {
+                                Image(systemName: "xmark").font(.system(size: 8.5, weight: .bold))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                            .help("Убрать")
+                        }
+                        .font(.callout)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.13)))
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $bulkShown) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("\(title): добавить списком").font(.headline)
+                Text("По одному значению в строке или через запятую. Повторы и уже добавленные пропускаются.")
+                    .font(.callout).foregroundStyle(.secondary)
+                TextEditor(text: $bulkText)
+                    .font(.body.monospaced())
+                    .frame(minHeight: 220)
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+                HStack {
+                    Text("Значений: \(SourceInput.split(bulkText).count)").foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Отмена") { bulkShown = false }.keyboardShortcut(.cancelAction)
+                    Button("Добавить") { add(bulkText); bulkShown = false }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(SourceInput.split(bulkText).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 520)
+        }
+        .confirmationDialog("Очистить список «\(title)»?", isPresented: $confirmClear) {
+            Button("Очистить", role: .destructive) { items = [] }
+        }
+    }
+
+    private func add(_ text: String) {
+        var bad: [String] = []
+        var next = items
+        for raw in SourceInput.split(text) {
+            guard let v = normalize(raw) else { bad.append(raw); continue }
+            if !next.contains(where: { $0.caseInsensitiveCompare(v) == .orderedSame }) { next.append(v) }
+        }
+        if next != items { items = next }
+        rejected = Array(bad.prefix(5))
+    }
+}
+
+/// Раскладка «в строку с переносом» для меток.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(proposal.width ?? .infinity, subviews)
+        let height = rows.last.map { $0.y + $0.height } ?? 0
+        let width = rows.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for row in arrange(bounds.width, subviews) {
+            for (index, x) in row.items {
+                subviews[index].place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + row.y), proposal: .unspecified)
+            }
+        }
+    }
+
+    private struct Row { var items: [(Int, CGFloat)] = []; var y: CGFloat = 0; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(_ maxWidth: CGFloat, _ subviews: Subviews) -> [Row] {
+        var rows: [Row] = [Row()]
+        for (i, view) in subviews.enumerated() {
+            let size = view.sizeThatFits(.unspecified)
+            var row = rows[rows.count - 1]
+            if !row.items.isEmpty && row.width + spacing + size.width > maxWidth {
+                let y = row.y + row.height + spacing
+                rows.append(Row(y: y))
+                row = rows[rows.count - 1]
+            }
+            let x = row.items.isEmpty ? 0 : row.width + spacing
+            row.items.append((i, x))
+            row.width = x + size.width
+            row.height = max(row.height, size.height)
+            rows[rows.count - 1] = row
+        }
+        return rows
+    }
 }

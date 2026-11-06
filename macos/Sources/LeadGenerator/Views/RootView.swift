@@ -1,4 +1,5 @@
 import LeadGenCore
+import LeadSearch
 import SwiftUI
 
 struct RootView: View {
@@ -13,6 +14,17 @@ struct RootView: View {
         } detail: {
             ZStack(alignment: .bottom) {
                 content
+                    .toolbar {
+                        ToolbarItem(placement: .principal) { SearchButton() }
+                        // Последний элемент панели — у её правого края.
+                        ToolbarItem(placement: .primaryAction) {
+                            Button { model.inspectorShown.toggle() } label: {
+                                Label(model.inspectorShown ? "Скрыть правую панель" : "Показать правую панель",
+                                      systemImage: "sidebar.right")
+                            }
+                            .help(model.inspectorShown ? "Скрыть правую панель (⌥⌘I)" : "Показать правую панель (⌥⌘I)")
+                        }
+                    }
                     .inspector(isPresented: $model.inspectorShown) {
                         InspectorView()
                             .inspectorColumnWidth(min: 300, ideal: 380 * look.scale, max: 560)
@@ -35,16 +47,13 @@ struct RootView: View {
                     .background(.background)
             }
         }
-        .task {
-            if model.syncConfigured { await model.syncNow() }
-        }
     }
 
     @ViewBuilder private var content: some View {
         switch model.section {
         case .home: DashboardView()
         case .sources: SourcesView()
-        case .runs: RunsView()
+        case .runs: SearchLogView()
         default: LeadsView()
         }
     }
@@ -68,8 +77,35 @@ struct InspectorView: View {
             } else if model.section == .sources {
                 SourcesInspector()
             } else {
-                SyncInspector()
+                SearchLogInspector()
             }
         }
+    }
+}
+
+/// Зелёная кнопка поиска в центре верхней панели.
+struct SearchButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        Button {
+            if model.searching { model.stopSearch() } else { model.runSearch() }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: model.searching ? "stop.fill" : "magnifyingglass")
+                    .font(.system(size: 11.5, weight: .bold))
+                Text(model.searching ? (model.searchProgress ?? "Идёт поиск…") : "Найти лиды")
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 28)
+            .frame(minWidth: 150)
+            .background(Capsule().fill(Color(red: 0.16, green: 0.70, blue: 0.33)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help(model.searching ? "Остановить поиск (⌘R)" : "Найти новые лиды во всех включённых источниках (⌘R)")
     }
 }

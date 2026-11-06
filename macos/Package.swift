@@ -8,12 +8,16 @@ let package = Package(
     products: [
         .executable(name: "LeadGenerator", targets: ["LeadGenerator"]),
         .library(name: "LeadGenCore", targets: ["LeadGenCore"]),
+        .library(name: "LeadSearch", targets: ["LeadSearch"]),
     ],
     targets: [
-        // Ядро без интерфейса: модели, расшифровка состояния, локальная база, синхронизация, экспорт.
+        // Ядро без интерфейса: модели, локальная база, учётные записи, экспорт.
         .target(name: "LeadGenCore", linkerSettings: [.linkedLibrary("sqlite3")]),
+        // Поиск лидов: источники, оценка, дедупликация. Без интерфейса, чтобы позже
+        // запускать тот же код на сервере.
+        .target(name: "LeadSearch", dependencies: ["LeadGenCore"]),
         // Приложение SwiftUI.
-        .executableTarget(name: "LeadGenerator", dependencies: ["LeadGenCore"]),
-        .testTarget(name: "LeadGenCoreTests", dependencies: ["LeadGenCore"]),
+        .executableTarget(name: "LeadGenerator", dependencies: ["LeadGenCore", "LeadSearch"]),
+        .testTarget(name: "LeadGenCoreTests", dependencies: ["LeadGenCore", "LeadSearch"]),
     ]
 )

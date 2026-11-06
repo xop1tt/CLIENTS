@@ -1,8 +1,9 @@
 import Foundation
 
-/// Локальная база приложения. Данные конвейера и действия пользователя хранятся рядом,
-/// но синхронизация никогда не затирает избранное, архив, заметки и удаления.
-public final class LeadStore {
+/// Локальная база пользователя. Результаты поиска и действия пользователя хранятся рядом,
+/// но поиск никогда не затирает избранное, архив, заметки и удаления.
+/// Соединения SQLite открыты в режиме FULLMUTEX, поиск работает через своё соединение.
+public final class LeadStore: @unchecked Sendable {
     public private(set) var db: SQLiteDB
     public var path: String { db.path }
 
@@ -73,101 +74,153 @@ public final class LeadStore {
         try db.exec("PRAGMA journal_mode=WAL")
         try db.exec(Self.schema)
         try db.run("INSERT OR IGNORE INTO kv(key, value) VALUES('schema_version', '1')")
+        try migrate()
     }
 
-    // MARK: - Импорт состояния конвейера
+    /// Миграции схемы старых баз (версия 1.0.x хранила результаты поиска из GitHub Actions).
+    func migrate() throws {
+        let cols = try db.query("PRAGMA table_info(source_state)").compactMap { $0["name"]?.string }
+        if !cols.contains("cursor_json") { try db.exec("ALTER TABLE source_state ADD COLUMN cursor_json TEXT") }
+        try db.exec("""
+        CREATE TABLE IF NOT EXISTS search_queries (
+            qhash TEXT PRIMARY KEY,
+            source TEXT NOT NULL,
+            label TEXT NOT NULL,
+            last_run_at TEXT NOT NULL,
+            results INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS seen_objects (
+            source TEXT NOT NULL,
+            object_id TEXT NOT NULL,
+            checked_at TEXT NOT NULL,
+            PRIMARY KEY (source, object_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_leads_fingerprint ON leads(fingerprint);
+        """)
+        try db.run("INSERT INTO kv(key, value) VALUES('schema_version', '2') ON CONFLICT(key) DO UPDATE SET value='2'")
+    }
 
-    /// Импортирует расшифрованную базу конвейера (SQLite из GitHub Actions).
+    // MARK: - Результаты поиска
+
+    private static let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.outputFormatting = [.sortedKeys]  // стабильный JSON: иначе каждый лид считался бы изменённым
+        return e
+    }()
+
+    /// Сохраняет найденный лид. Избранное, архив, заметки и удаления пользователя не трогаются.
     @discardableResult
-    public func importPipelineDatabase(at remotePath: String) throws -> ImportResult {
-        let remote = try SQLiteDB(path: remotePath, readOnly: true)
-        defer { remote.close() }
-        guard try remote.tableExists("leads") else {
-            throw SQLiteError(message: "в файле состояния нет таблицы leads")
-        }
-        let rows = try remote.query("""
-            SELECT lead_id, fingerprint, kind, source, data_json, score, relevance, discovered_at, updated_at
-            FROM leads
-            """)
-        var externals: [String: [ExternalResult]] = [:]
-        if try remote.tableExists("external_results") {
-            for r in try remote.query("SELECT lead_id, service, processed_at, ok, score, label, error FROM external_results ORDER BY id") {
-                guard let id = r["lead_id"]?.string else { continue }
-                externals[id, default: []].append(ExternalResult(
-                    service: r["service"]?.string ?? "", processedAt: ISODate.parse(r["processed_at"]?.string),
-                    ok: r["ok"]?.bool ?? false, score: r["score"]?.double, label: r["label"]?.string,
-                    error: r["error"]?.string))
-            }
-        }
-        let sources = try remote.tableExists("source_state")
-            ? try remote.query("SELECT source, last_success_at, last_attempt_at, consecutive_failures, status, last_error FROM source_state")
-            : []
-        let errors = try remote.tableExists("errors")
-            ? try remote.query("SELECT id, at, module, message FROM errors ORDER BY id DESC LIMIT 300")
-            : []
-
-        let decoder = JSONDecoder()
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]  // стабильный JSON: иначе порядок ключей словарей меняется и каждый лид считается обновлённым
+    public func save(_ lead: LeadData, id: String, fingerprint: String) throws -> SaveOutcome {
+        var data = lead
         let now = ISODate.now()
-        var added = 0, updated = 0
-
-        try db.transaction {
-            for r in rows {
-                guard let id = r["lead_id"]?.string, let json = r["data_json"]?.string,
-                      var data = try? decoder.decode(LeadData.self, from: Data(json.utf8)) else { continue }
-                if let ext = externals[id], !ext.isEmpty {
-                    // Внешние результаты в отдельной таблице — источник истины.
-                    data.externalResults = ext
-                }
-                let dataJSON = String(data: try encoder.encode(data), encoding: .utf8) ?? json
-                let discovered = r["discovered_at"]?.string ?? ISODate.format(data.discoveredAt) ?? now
-                let exists = try !db.query("SELECT 1 FROM leads WHERE lead_id=?", [.text(id)]).isEmpty
-                if exists {
-                    updated += try db.run("""
-                        UPDATE leads SET fingerprint=?, kind=?, source=?, title=?, score=?, relevance=?,
-                            updated_at=?, data_json=?
-                        WHERE lead_id=? AND (updated_at IS NOT ?  OR data_json <> ?)
-                        """, [.of(r["fingerprint"]?.string ?? ""), .text(data.kind.rawValue), .text(data.source),
-                              .text(data.title), .double(data.score), .text(data.relevance.rawValue),
-                              .of(r["updated_at"]?.string), .text(dataJSON), .text(id),
-                              .of(r["updated_at"]?.string), .text(dataJSON)])
-                } else {
-                    try db.run("""
-                        INSERT INTO leads(lead_id, fingerprint, kind, source, title, score, relevance,
-                            discovered_at, updated_at, data_json, imported_at)
-                        VALUES(?,?,?,?,?,?,?,?,?,?,?)
-                        """, [.text(id), .of(r["fingerprint"]?.string ?? ""), .text(data.kind.rawValue),
-                              .text(data.source), .text(data.title), .double(data.score),
-                              .text(data.relevance.rawValue), .text(discovered), .of(r["updated_at"]?.string),
-                              .text(dataJSON), .text(now)])
-                    try logEvent(id, "Получен из поиска (\(SourceCatalog.title(data.source)))")
-                    added += 1
-                }
-            }
-            for s in sources {
-                guard let name = s["source"]?.string else { continue }
-                try db.run("""
-                    INSERT INTO source_state(source, last_success_at, last_attempt_at, consecutive_failures, status, last_error)
-                    VALUES(?,?,?,?,?,?)
-                    ON CONFLICT(source) DO UPDATE SET last_success_at=excluded.last_success_at,
-                        last_attempt_at=excluded.last_attempt_at, consecutive_failures=excluded.consecutive_failures,
-                        status=excluded.status, last_error=excluded.last_error
-                    """, [.text(name), .of(s["last_success_at"]?.string), .of(s["last_attempt_at"]?.string),
-                          .int(s["consecutive_failures"]?.int ?? 0), .text(s["status"]?.string ?? "ok"),
-                          .of(s["last_error"]?.string)])
-            }
-            if !errors.isEmpty {
-                try db.run("DELETE FROM pipeline_errors")
-                for e in errors {
-                    try db.run("INSERT INTO pipeline_errors(id, at, module, message) VALUES(?,?,?,?)",
-                               [.int(e["id"]?.int ?? 0), .of(e["at"]?.string),
-                                .text(e["module"]?.string ?? ""), .text(e["message"]?.string ?? "")])
-                }
-            }
+        if let row = try db.query("SELECT discovered_at, data_json FROM leads WHERE lead_id=?", [.text(id)]).first {
+            // Дата обнаружения — первая, а не последняя.
+            let discovered = row["discovered_at"]?.string
+            data.discoveredAt = ISODate.parse(discovered) ?? data.discoveredAt
+            let json = String(data: try Self.encoder.encode(data), encoding: .utf8) ?? "{}"
+            guard json != row["data_json"]?.string else { return .unchanged }
+            try db.run("""
+                UPDATE leads SET fingerprint=?, kind=?, source=?, title=?, score=?, relevance=?, updated_at=?, data_json=?
+                WHERE lead_id=?
+                """, [.text(fingerprint), .text(data.kind.rawValue), .text(data.source), .text(data.title),
+                      .double(data.score), .text(data.relevance.rawValue), .text(now), .text(json), .text(id)])
+            return .updated
         }
+        if !fingerprint.isEmpty,
+           try !db.query("SELECT 1 FROM leads WHERE fingerprint=? LIMIT 1", [.text(fingerprint)]).isEmpty {
+            return .duplicate  // та же заявка или организация уже есть из другого места
+        }
+        let json = String(data: try Self.encoder.encode(data), encoding: .utf8) ?? "{}"
+        try db.run("""
+            INSERT INTO leads(lead_id, fingerprint, kind, source, title, score, relevance, discovered_at, updated_at, data_json, imported_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?)
+            """, [.text(id), .text(fingerprint), .text(data.kind.rawValue), .text(data.source), .text(data.title),
+                  .double(data.score), .text(data.relevance.rawValue), .of(ISODate.format(data.discoveredAt) ?? now),
+                  .text(now), .text(json), .text(now)])
+        try logEvent(id, "Найден поиском (\(SourceCatalog.title(data.source)))")
+        return .added
+    }
+
+    /// После поиска: применить исключения к новым лидам и запомнить время.
+    public func searchFinished() throws {
         try applyExclusions()
-        return ImportResult(added: added, updated: updated, sources: sources.count)
+        try setValue("last_search_at", ISODate.now())
+    }
+
+    public func sourceCursor(_ source: String) -> String? {
+        try? db.scalar("SELECT cursor_json FROM source_state WHERE source=?", [.text(source)]).string
+    }
+
+    public func lastSuccess(_ source: String) -> Date? {
+        ISODate.parse(try? db.scalar("SELECT last_success_at FROM source_state WHERE source=?", [.text(source)]).string)
+    }
+
+    public func markAttempt(_ source: String) {
+        _ = try? db.run("""
+            INSERT INTO source_state(source, last_attempt_at) VALUES(?,?)
+            ON CONFLICT(source) DO UPDATE SET last_attempt_at=excluded.last_attempt_at
+            """, [.text(source), .text(ISODate.now())])
+    }
+
+    public func finishSource(_ source: String, ok: Bool, partial: Bool, error: String?, cursor: String?) {
+        let now = ISODate.now()
+        if ok {
+            _ = try? db.run("""
+                UPDATE source_state SET last_success_at=?, consecutive_failures=0, status=?, last_error=?,
+                    cursor_json=COALESCE(?, cursor_json)
+                WHERE source=?
+                """, [.text(now), .text(partial ? "partial" : "ok"), .of(error), .of(cursor), .text(source)])
+        } else {
+            _ = try? db.run("""
+                UPDATE source_state SET consecutive_failures=consecutive_failures+1, status='error', last_error=?,
+                    cursor_json=COALESCE(?, cursor_json)
+                WHERE source=?
+                """, [.of(error), .of(cursor), .text(source)])
+        }
+    }
+
+    public func logError(module: String, message: String) {
+        _ = try? db.run("INSERT INTO pipeline_errors(at, module, message) VALUES(?,?,?)",
+                        [.text(ISODate.now()), .text(module), .text(message)])
+        _ = try? db.run("DELETE FROM pipeline_errors WHERE id NOT IN (SELECT id FROM pipeline_errors ORDER BY id DESC LIMIT 500)")
+    }
+
+    public func logRun(ok: Bool, added: Int, updated: Int, message: String) {
+        try? addSyncLog(ok: ok, added: added, updated: updated, message: message)
+    }
+
+    public func queryLastRun(_ hash: String) -> Date? {
+        ISODate.parse(try? db.scalar("SELECT last_run_at FROM search_queries WHERE qhash=?", [.text(hash)]).string)
+    }
+
+    public func recordQuery(_ hash: String, source: String, label: String, results: Int) {
+        _ = try? db.run("""
+            INSERT INTO search_queries(qhash, source, label, last_run_at, results) VALUES(?,?,?,?,?)
+            ON CONFLICT(qhash) DO UPDATE SET last_run_at=excluded.last_run_at, results=excluded.results
+            """, [.text(hash), .text(source), .text(label), .text(ISODate.now()), .int(Int64(results))])
+    }
+
+    public func forgetQuery(_ hash: String) {
+        _ = try? db.run("DELETE FROM search_queries WHERE qhash=?", [.text(hash)])
+    }
+
+    public func objectCheckedAt(source: String, objectId: String) -> Date? {
+        ISODate.parse(try? db.scalar("SELECT checked_at FROM seen_objects WHERE source=? AND object_id=?",
+                                     [.text(source), .text(objectId)]).string)
+    }
+
+    public func markObjectChecked(source: String, objectId: String) {
+        _ = try? db.run("""
+            INSERT INTO seen_objects(source, object_id, checked_at) VALUES(?,?,?)
+            ON CONFLICT(source, object_id) DO UPDATE SET checked_at=excluded.checked_at
+            """, [.text(source), .text(objectId), .text(ISODate.now())])
+    }
+
+    /// Сбросить память источника (курсоры, историю запросов): следующий поиск начнёт заново.
+    public func resetSourceMemory(_ source: String) throws {
+        try db.run("UPDATE source_state SET cursor_json=NULL WHERE source=?", [.text(source)])
+        try db.run("DELETE FROM search_queries WHERE source=?", [.text(source)])
+        try db.run("DELETE FROM seen_objects WHERE source=?", [.text(source)])
     }
 
     // MARK: - Чтение
@@ -256,7 +309,7 @@ public final class LeadStore {
                    event: on ? "Перенесён в архив" : "Возвращён из архива")
     }
 
-    /// Удалённые лиды остаются в базе скрытыми, чтобы следующая синхронизация не вернула их.
+    /// Удалённые лиды остаются в базе скрытыми, чтобы следующий поиск не вернул их.
     public func delete(_ ids: [String]) throws {
         try update(ids, "UPDATE leads SET deleted=1 WHERE lead_id=?", [], event: "Удалён")
     }
@@ -388,6 +441,7 @@ public final class LeadStore {
         db = try SQLiteDB(path: current.path)
         try db.exec("PRAGMA journal_mode=WAL")
         try db.exec(Self.schema)
+        try migrate()
     }
 
     /// Переносит базу в другую папку.

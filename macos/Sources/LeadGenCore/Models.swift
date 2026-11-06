@@ -71,7 +71,7 @@ public struct ExternalResult: Codable, Hashable, Sendable {
     }
 }
 
-/// Лид в том виде, в котором его сохраняет поисковый конвейер на Python (`Lead.to_json`).
+/// Лид. JSON-формат совместим с Python-версией (`Lead.to_json`), чтобы старые базы читались.
 public struct LeadData: Codable, Hashable, Sendable {
     public var kind: LeadKind
     public var source: String
@@ -237,7 +237,7 @@ public struct LeadItem: Identifiable, Hashable, Sendable {
     public var isNew: Bool { !seen }
 }
 
-/// Состояние источника, как его ведёт конвейер.
+/// Состояние источника: последние запуски и ошибки.
 public struct SourceState: Identifiable, Hashable, Sendable {
     public var id: String { source }
     public var source: String
@@ -254,7 +254,7 @@ public struct SourceState: Identifiable, Hashable, Sendable {
     }
 }
 
-/// Ошибка из журнала конвейера.
+/// Ошибка или предупреждение из журнала поиска.
 public struct PipelineError: Identifiable, Hashable, Sendable {
     public var id: Int64
     public var at: Date?
@@ -283,7 +283,7 @@ public struct Exclusion: Identifiable, Hashable, Sendable {
     public var createdAt: Date?
 }
 
-/// Запись журнала синхронизации.
+/// Запись журнала запусков поиска.
 public struct SyncLogEntry: Identifiable, Hashable, Sendable {
     public var id: Int64
     public var at: Date?
@@ -300,12 +300,5 @@ public struct LeadEvent: Identifiable, Hashable, Sendable {
     public var action: String
 }
 
-/// Итог импорта состояния.
-public struct ImportResult: Sendable, Equatable {
-    public var added: Int
-    public var updated: Int
-    public var sources: Int
-    public init(added: Int, updated: Int, sources: Int) {
-        self.added = added; self.updated = updated; self.sources = sources
-    }
-}
+/// Итог сохранения найденного лида.
+public enum SaveOutcome: Sendable, Equatable { case added, updated, unchanged, duplicate }

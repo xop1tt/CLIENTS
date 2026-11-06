@@ -1,10 +1,12 @@
 import LeadGenCore
+import LeadSearch
 import SwiftUI
 
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @Environment(AppearanceSettings.self) private var look
     @Environment(\.openSettings) private var openSettings
+    @Environment(SessionModel.self) private var session
     @AppStorage("sidebar.hidden") private var hiddenRaw = ""
 
     private var hidden: Set<String> { Set(hiddenRaw.split(separator: ",").map(String.init)) }
@@ -85,28 +87,27 @@ struct SidebarView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
+            Image(systemName: "person.crop.circle.fill").font(.system(size: 22 * look.scale)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
-                if model.syncing {
-                    Text("Синхронизация…").appFont(12, .medium)
-                } else if let at = model.lastSyncAt {
-                    Text("Синхронизировано \(at.shortRelative)").appFont(12, .medium)
+                Text(model.username).appFont(12, .semibold)
+                if model.searching {
+                    Text(model.searchProgress ?? "Идёт поиск…").appFont(11).foregroundStyle(.secondary)
                 } else {
-                    Text(model.syncConfigured ? "Ещё не синхронизировано" : "Синхронизация не настроена").appFont(12, .medium)
+                    Text(model.lastSearchAt.map { "Поиск: \($0.shortRelative)" } ?? "Поиск ещё не запускался")
+                        .appFont(11).foregroundStyle(.secondary)
                 }
-                Text(model.lastStateAt.map { "Поиск в Actions: \($0.shortRelative)" } ?? "Данные хранятся на этом Mac")
-                    .appFont(11).foregroundStyle(.secondary)
             }
             .lineLimit(1)
             Spacer()
-            if model.syncing {
-                ProgressView().controlSize(.small)
-            } else if model.syncConfigured {
-                Button { Task { await model.syncNow() } } label: { Image(systemName: "arrow.triangle.2.circlepath") }
-                    .buttonStyle(.borderless).help("Синхронизировать (⌘R)")
-            } else {
-                Button { openSettings() } label: { Image(systemName: "gearshape") }
-                    .buttonStyle(.borderless).help("Настроить синхронизацию")
-            }
+            if model.searching { ProgressView().controlSize(.small) }
+            Menu {
+                Button("Настройки…") { openSettings() }
+                Divider()
+                Button("Выйти") { session.logout() }
+            } label: { Image(systemName: "ellipsis.circle") }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
         .scaledPadding(.horizontal, 12)
         .scaledPadding(.vertical, 10)
