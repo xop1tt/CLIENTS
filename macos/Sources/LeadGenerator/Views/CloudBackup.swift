@@ -77,7 +77,7 @@ enum CloudStorage {
 
 /// «Настройки → Данные»: резервные копии в облачный диск.
 struct CloudBackupSection: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @State private var folders: [CloudFolder] = []
 
     var body: some View {

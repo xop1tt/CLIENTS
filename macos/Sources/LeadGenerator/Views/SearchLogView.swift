@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Журнал запусков поиска на этом Mac.
 struct SearchLogView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         Group {
@@ -39,7 +39,7 @@ struct SearchLogView: View {
 
 /// Правая панель журнала: последний запуск по источникам и ошибки.
 struct SearchLogInspector: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         ScrollView {

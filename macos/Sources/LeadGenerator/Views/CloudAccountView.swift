@@ -5,8 +5,8 @@ import SwiftUI
 /// Настройки облачной учётной записи: адрес, синхронизация, пароль, смена адреса,
 /// перенос локальных данных, выход и удаление.
 struct CloudAccountSettingsView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(SessionModel.self) private var session
+    @Environment(\.appModel) private var model
+    @Environment(\.session) private var session
 
     var body: some View {
         Form {
@@ -23,7 +23,7 @@ struct CloudAccountSettingsView: View {
 }
 
 private struct AccountSection: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
 
     var body: some View {
         Section("Учётная запись") {
@@ -46,7 +46,7 @@ private struct AccountSection: View {
 }
 
 private struct SyncSection: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var stats: [String: Int]?
     @State private var loading = false
 
@@ -83,7 +83,7 @@ private struct SyncSection: View {
 }
 
 private struct CloudPasswordSection: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var old = ""
     @State private var new = ""
     @State private var again = ""
@@ -118,7 +118,7 @@ private struct CloudPasswordSection: View {
 }
 
 private struct EmailChangeSection: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var newEmail = ""
     @State private var password = ""
     @State private var codeCurrent = ""
@@ -190,7 +190,7 @@ private struct EmailChangeSection: View {
 }
 
 private struct ImportLocalSection: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var username = ""
     @State private var password = ""
     @State private var result: String?
@@ -226,7 +226,7 @@ private struct ImportLocalSection: View {
 }
 
 private struct DeleteAccountSection: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var password = ""
     @State private var asking = false
     @State private var result: String?
