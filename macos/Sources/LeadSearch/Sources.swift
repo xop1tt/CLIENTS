@@ -78,8 +78,12 @@ public enum RSSSource {
                 let title = String(SearchText.htmlToText(e.title).prefix(300))
                 let desc = SearchText.htmlToText(e.summary)
                 guard SearchText.prefilter("\(title) \(desc)", cfg.keywords) else { continue }
+                // GUID-ссылка уникальна сама по себе (так было и в Python-версии); короткий GUID вроде «1»
+                // может совпасть у разных лент, поэтому к нему добавляется адрес ленты.
+                let low = e.id.lowercased()
+                let externalId = low.hasPrefix("http://") || low.hasPrefix("https://") ? e.id : "\(feed)#\(e.id)"
                 res.candidates.append(Candidate(data: LeadData(
-                    kind: .order, source: SourceKey.rss, externalId: e.id, title: title, url: e.link,
+                    kind: .order, source: SourceKey.rss, externalId: externalId, title: title, url: e.link,
                     description: String(desc.prefix(4000)), publishedAt: e.published,
                     contacts: SearchText.contacts(desc), category: e.category)))
             }
@@ -271,7 +275,8 @@ public enum OSMSource {
         var siteCache: [String: SiteCheck] = [:]
         for region in cfg.regions {
             for cat in cats {
-                try Task.checkCancellation()
+                // Остановка: возвращаем уже найденное, чтобы движок успел его сохранить.
+                if Task.isCancelled { return res }
                 let query = buildQuery(region: region, filters: cat.filters)
                 let qhash = SearchText.shortHash(query)
                 if let last = memory.queryLastRun(qhash), now.timeIntervalSince(last) < cfg.refreshDays * 86400 {
@@ -304,10 +309,16 @@ public enum OSMSource {
                         memory.forgetQuery(qhash)
                         return res
                     }
-                    if let c = try await candidate(el, cat: cat, region: region, cfg: cfg, memory: memory,
-                                                   siteHTTP: siteHTTP, cache: &siteCache, now: now) {
-                        res.candidates.append(c)
-                        added += 1
+                    do {
+                        if let c = try await candidate(el, cat: cat, region: region, cfg: cfg, memory: memory,
+                                                       siteHTTP: siteHTTP, cache: &siteCache, now: now) {
+                            res.candidates.append(c)
+                            added += 1
+                        }
+                    } catch is CancellationError {
+                        // Запрос обработан не до конца: забываем его, а найденное возвращаем на сохранение.
+                        memory.forgetQuery(qhash)
+                        return res
                     }
                 }
             }

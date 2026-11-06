@@ -44,8 +44,10 @@ final class SessionModel {
         do {
             let first = !auth.hasUsers
             let account = try auth.register(username: username, password: password)
-            if first { adoptLegacyDatabase(for: account.username) }
+            let migrationError = first ? adoptLegacyDatabase(for: account.username) : nil
             finish(account, remember: remember)
+            // Ошибку переноса старой базы показываем после входа: повторно перенос не запускается.
+            if let migrationError { current?.lastError = migrationError }
         } catch { self.error = error.localizedDescription }
     }
 
@@ -87,10 +89,10 @@ final class SessionModel {
     }
 
     /// Первая учётная запись получает лиды из базы версии 1.0. Исходный файл остаётся рядом под другим именем.
-    private func adoptLegacyDatabase(for username: String) {
-        guard let auth, let legacy = legacyDatabase else { return }
+    private func adoptLegacyDatabase(for username: String) -> String? {
+        guard let auth, let legacy = legacyDatabase else { return nil }
         let target = auth.dataDirectory(for: username).appendingPathComponent("leads.db")
-        guard !FileManager.default.fileExists(atPath: target.path) else { return }
+        guard !FileManager.default.fileExists(atPath: target.path) else { return nil }
         do {
             let old = try LeadStore(path: legacy.path)
             try old.backup(to: target)
@@ -100,8 +102,9 @@ final class SessionModel {
             try FileManager.default.moveItem(at: legacy, to: renamed)
             for suffix in ["-wal", "-shm"] { try? FileManager.default.removeItem(atPath: legacy.path + suffix) }
             UserDefaults.standard.removeObject(forKey: "data.path")
+            return nil
         } catch {
-            self.error = "Старую базу не удалось перенести: \(error.localizedDescription). Её можно восстановить в настройках «Данные»."
+            return "Лиды из прежней версии не перенесены: \(error.localizedDescription). Файл остался на месте: \(legacy.path). Его можно открыть через «Настройки → Данные → Восстановить из файла…»."
         }
     }
 

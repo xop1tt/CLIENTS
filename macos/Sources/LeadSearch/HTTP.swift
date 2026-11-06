@@ -29,8 +29,18 @@ public protocol HTTPTransport: Sendable {
     func send(_ request: URLRequest) async throws -> HTTPResponse
 }
 
+/// Не даёт перенаправлениям увести запрос на локальные адреса (127.0.0.1, 192.168.…, localhost).
+final class PublicRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
+        let target = request.url?.absoluteString ?? ""
+        completionHandler(SiteChecker.isPublicHTTPURL(target) ? request : nil)
+    }
+}
+
 public struct URLSessionTransport: HTTPTransport {
     let session: URLSession
+    let redirectGuard = PublicRedirectGuard()
 
     public init() {
         let c = URLSessionConfiguration.ephemeral
@@ -41,7 +51,7 @@ public struct URLSessionTransport: HTTPTransport {
     }
 
     public func send(_ request: URLRequest) async throws -> HTTPResponse {
-        let (data, resp) = try await session.data(for: request)
+        let (data, resp) = try await session.data(for: request, delegate: redirectGuard)
         guard let h = resp as? HTTPURLResponse else { throw HTTPError(message: "нет HTTP-ответа", transient: true) }
         var headers: [String: String] = [:]
         for (k, v) in h.allHeaderFields { headers["\(k)".lowercased()] = "\(v)" }
@@ -136,7 +146,7 @@ public final class SourceHTTP: @unchecked Sendable {
                                     transient: Self.retryStatuses.contains(resp.status))
                 guard err.transient else { throw err }
                 lastError = err
-                if let ra = resp.headers["retry-after"], let secs = Double(ra), attempt < maxAttempts {
+                if let ra = resp.headers["retry-after"], let secs = Self.retryAfter(ra), attempt < maxAttempts {
                     await sleep(min(secs, 120))
                     continue
                 }
@@ -154,6 +164,22 @@ public final class SourceHTTP: @unchecked Sendable {
             }
         }
         throw lastError
+    }
+
+    private static let httpDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(secondsFromGMT: 0)
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f
+    }()
+
+    /// Retry-After: число секунд или HTTP-дата.
+    static func retryAfter(_ value: String, now: Date = Date()) -> Double? {
+        let v = value.trimmingCharacters(in: .whitespaces)
+        if let secs = Double(v) { return max(0, secs) }
+        guard let date = httpDate.date(from: v) else { return nil }
+        return max(0, date.timeIntervalSince(now))
     }
 
     /// Адрес без параметров (там бывают ключи доступа).

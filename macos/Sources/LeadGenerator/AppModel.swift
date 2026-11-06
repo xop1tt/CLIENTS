@@ -325,6 +325,7 @@ final class AppModel {
 
     func restore(from url: URL) {
         guard let store else { return }
+        guard !searching else { lastError = "Дождитесь окончания поиска или остановите его, затем восстановите базу."; return }
         do {
             try store.restore(from: url)
             reload()
@@ -334,6 +335,7 @@ final class AppModel {
 
     func moveDatabase(to dir: URL) {
         guard let store else { return }
+        guard !searching else { lastError = "Дождитесь окончания поиска или остановите его, затем перенесите базу."; return }
         do {
             let path = try store.move(toDirectory: dir)
             defaults.set(path, forKey: key("data.path"))

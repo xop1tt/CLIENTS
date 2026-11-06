@@ -256,6 +256,7 @@ struct DataSettingsView: View {
                     Button("Перенести в другую папку…") {
                         if let dir = chooseFolder() { model.moveDatabase(to: dir) }
                     }
+                    .disabled(model.searching)
                 }
                 Text("База и настройки лежат отдельно от программы: обновление приложения их не удаляет.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -274,13 +275,14 @@ struct DataSettingsView: View {
                         p.allowedContentTypes = [UTType(filenameExtension: "db") ?? .data]
                         if p.runModal() == .OK, let url = p.url { model.restore(from: url) }
                     }
+                    .disabled(model.searching)
                 }
                 ForEach(backups.prefix(8), id: \.self) { url in
                     HStack {
                         Image(systemName: "archivebox").foregroundStyle(.secondary)
                         Text(url.lastPathComponent).font(.callout)
                         Spacer()
-                        Button("Восстановить") { model.restore(from: url) }
+                        Button("Восстановить") { model.restore(from: url) }.disabled(model.searching)
                     }
                 }
             }

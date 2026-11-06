@@ -142,6 +142,13 @@ final class SourceParsingTests: XCTestCase {
         XCTAssertEqual(q, #"[out:json][timeout:90];area["name"="Ереван"]["boundary"="administrative"]->.a0;area["name:ru"="Ереван"]["boundary"="administrative"]->.a1;area["name:en"="Ереван"]["boundary"="administrative"]->.a2;(.a0;.a1;.a2;)->.a;(nwr["shop"="beauty"](area.a););out center tags;"#)
     }
 
+    func testRetryAfter() {
+        let now = ISODate.parse("2026-11-06T11:00:00+00:00")!
+        XCTAssertEqual(SourceHTTP.retryAfter("30", now: now), 30)
+        XCTAssertEqual(SourceHTTP.retryAfter("Fri, 06 Nov 2026 11:01:00 GMT", now: now), 60)
+        XCTAssertNil(SourceHTTP.retryAfter("скоро", now: now))
+    }
+
     func testPublicURL() {
         XCTAssertTrue(SiteChecker.isPublicHTTPURL("https://example.ru"))
         XCTAssertFalse(SiteChecker.isPublicHTTPURL("http://192.168.1.1"))
