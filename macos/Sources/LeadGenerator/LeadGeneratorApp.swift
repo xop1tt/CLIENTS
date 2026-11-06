@@ -138,13 +138,18 @@ struct SessionRoot: View {
     @Environment(SessionModel.self) private var session
 
     var body: some View {
-        if let model = session.current {
-            RootView()
-                .environment(model)
-                .id(model.username)
-        } else {
-            AuthView()
+        Group {
+            if let model = session.current {
+                RootView()
+                    .environment(model)
+                    .id(model.username)
+            } else {
+                AuthView()
+            }
         }
+        // Ссылки из писем (leadgenerator://auth/callback) открываются в этом же окне.
+        .onOpenURL { session.handle(url: $0) }
+        .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
     }
 }
 

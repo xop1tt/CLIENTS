@@ -210,6 +210,10 @@ struct AccountSettingsView: View {
     @State private var ok = false
 
     var body: some View {
+        if model.isCloud { CloudAccountSettingsView() } else { localForm }
+    }
+
+    private var localForm: some View {
         Form {
             Section("Пользователь") {
                 LabeledContent("Имя пользователя", value: model.username)

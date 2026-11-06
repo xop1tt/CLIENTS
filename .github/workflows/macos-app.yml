@@ -49,6 +49,10 @@ jobs:
         env:
           # Универсальная сборка (arm64 + x86_64) — только для main; в PR хватает одной архитектуры.
           UNIVERSAL: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          # Облако: адрес проекта и ПУБЛИЧНЫЙ ключ из переменных репозитория (не секретов).
+          # Не заданы — собирается версия только с локальными учётными записями.
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: ./scripts/build-app.sh build
 
       - name: Smoke test (launch)

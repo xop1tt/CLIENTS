@@ -1,3 +1,6 @@
+// Только Apple-платформы (CommonCrypto, Связка ключей). Остальное ядро собирается и на Linux,
+// где на тестовом стенде проверяется облачная синхронизация.
+#if canImport(Security)
 import Foundation
 import Security
 
@@ -33,3 +36,4 @@ public enum Keychain {
         return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
     }
 }
+#endif

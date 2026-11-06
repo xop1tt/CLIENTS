@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 
 /// Минимальная обёртка над SQLite: только параметризованные запросы.
 public enum SQLValue: Equatable, Sendable {

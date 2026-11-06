@@ -1,3 +1,6 @@
+// Только Apple-платформы (CommonCrypto, Связка ключей). Остальное ядро собирается и на Linux,
+// где на тестовом стенде проверяется облачная синхронизация.
+#if canImport(Security)
 import CommonCrypto
 import Foundation
 import Security
@@ -82,6 +85,14 @@ public final class LocalAuthService: AuthService {
                                     [.text(Self.key(username))]).first else { return nil }
         return UserAccount(username: r["username"]?.string ?? username, createdAt: ISODate.parse(r["created_at"]?.string),
                            lastLoginAt: ISODate.parse(r["last_login_at"]?.string))
+    }
+
+    /// Все локальные учётные записи (для переноса их данных в облачную).
+    public func allAccounts() -> [UserAccount] {
+        ((try? db.query("SELECT username, created_at, last_login_at FROM users ORDER BY username_key")) ?? []).map {
+            UserAccount(username: $0["username"]?.string ?? "", createdAt: ISODate.parse($0["created_at"]?.string),
+                        lastLoginAt: ISODate.parse($0["last_login_at"]?.string))
+        }
     }
 
     public func register(username: String, password: String) throws -> UserAccount {
@@ -172,3 +183,4 @@ public final class LocalAuthService: AuthService {
         return diff == 0
     }
 }
+#endif
