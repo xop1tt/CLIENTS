@@ -1,0 +1,150 @@
+# Конфигурация Lead Generator. Секреты здесь НЕ хранятся — только в GitHub Secrets / переменных окружения.
+# Скопируйте в config.yaml, если хотите свои правки (config.yaml в репозитории тоже публичный — без личных данных!).
+
+# dry-run — ничего не отправляется наружу (Telegram, Notion, внешние сервисы), всё пишется в лог.
+# live — боевой режим. В GitHub Actions режим задаётся переменной репозитория LEADGEN_MODE.
+mode: dry-run
+
+sources:
+  # ---------- Готовые заказы ----------
+  fl_ru:
+    type: rss
+    enabled: true
+    interval_hours: 2
+    feeds:
+      - url: https://www.fl.ru/rss/all.xml   # официальная публичная RSS-лента FL.ru
+    prefilter_keywords: []                  # пусто = все записи идут в scoring
+    http: {min_interval_sec: 2, max_requests_per_run: 5, max_requests_per_day: 60}
+
+  telegram_channels:
+    type: telegram_web
+    enabled: true
+    interval_hours: 3
+    # Публичные каналы с заказами (имя после t.me/). Канал должен иметь веб-превью t.me/s/<имя>.
+    # Список сознательно пуст: добавьте проверенные вами каналы, например:
+    # channels: [some_freelance_orders, another_channel]
+    channels: []
+    max_pages_per_channel: 3
+    prefilter_keywords: [сайт, бот, приложени, разработ, программист, автоматизац, crm, срм, парсер, интеграц,
+                         лендинг, верстк, доработ, интернет-магазин, telegram, телеграм, python, api]
+    http: {min_interval_sec: 3, max_requests_per_run: 40, max_requests_per_day: 400}
+
+  vk_communities:
+    type: vk_wall
+    enabled: false                          # включите после создания секрета VK_SERVICE_TOKEN
+    interval_hours: 3
+    communities: []                         # короткие имена открытых сообществ с заказами (vk.com/<имя>)
+    page_size: 50
+    max_pages: 2
+    prefilter_keywords: [сайт, бот, приложени, разработ, программист, автоматизац, crm, парсер, интеграц]
+    http: {min_interval_sec: 0.4, max_requests_per_run: 40, max_requests_per_day: 2000}
+
+  # ---------- Организации (потенциальные клиенты) ----------
+  osm_organizations:
+    type: osm_overpass
+    enabled: true
+    interval_hours: 120                     # раз в 5 дней (как 2ГИС в ТЗ: 3–7 дней)
+    refresh_days: 7                         # одинаковый запрос регион×категория не чаще раза в неделю
+    recheck_days: 60                        # повторная проверка уже известной организации
+    max_new_per_run: 40                     # новых организаций за запуск (остальные — в следующий)
+    check_websites: true
+    endpoint: https://overpass-api.de/api/interpreter
+    timeout: 90
+    regions:
+      - {name: Казань}
+      # - {name: Москва, admin_level: 4}
+    categories:
+      beauty:     {label: Салоны красоты,    group: beauty,      filters: ['["shop"="beauty"]', '["shop"="hairdresser"]']}
+      dance:      {label: Танцевальные студии, group: dance,     filters: ['["leisure"="dance"]', '["amenity"="dancing_school"]']}
+      restaurant: {label: Рестораны,         group: restaurant,  filters: ['["amenity"="restaurant"]']}
+      cafe:       {label: Кафе,              group: restaurant,  filters: ['["amenity"="cafe"]']}
+      education:  {label: Образовательные центры, group: education, filters: ['["amenity"="language_school"]', '["amenity"="training"]', '["amenity"="music_school"]']}
+      medical:    {label: Медицина и косметология, group: medical, filters: ['["amenity"="dentist"]', '["healthcare"="clinic"]', '["amenity"="clinic"]']}
+      fitness:    {label: Спорт и фитнес,    group: fitness,     filters: ['["leisure"="fitness_centre"]', '["leisure"="sports_centre"]']}
+      shops:      {label: Магазины,          group: shop,        filters: ['["shop"="clothes"]', '["shop"="gift"]', '["shop"="florist"]']}
+    http: {min_interval_sec: 5, max_requests_per_run: 10, max_requests_per_day: 50, timeout_sec: 120}
+    site_http: {min_interval_sec: 1, max_requests_per_run: 40, max_attempts: 2, timeout_sec: 12}
+
+scoring:
+  external_weight: 0.25                     # доля внешних оценок в итоговой (внешнее ≠ истина)
+  orders:
+    max_age_days: 14
+    min_budget_rub: 3000
+    thresholds: {high: 65, medium: 45, low: 25}
+    weights:
+      topic: 30
+      intent: 20
+      offer_penalty: 35
+      budget: 15
+      low_budget_penalty: 10
+      urgency: 5
+      completeness: 10
+      too_short_penalty: 10
+      customer_type: 5
+      feasibility: 5
+      feasibility_penalty: 15
+      spam_penalty: 40
+      freshness: 10
+    project_types:
+      site:         {keywords: [сайт, лендинг, landing, интернет-магазин, wordpress, tilda, тильда, битрикс, верстк, одностраничник]}
+      telegram_bot: {keywords: [телеграм бот, telegram бот, телеграм-бот, telegram-бот, бот для телеграм, бот в телеграм, чат-бот, чат бот, tg бот, aiogram, бота]}
+      mobile_app:   {keywords: [мобильное приложение, мобильного приложения, приложение для ios, приложение для android, flutter, react native, android, ios]}
+      web_app:      {keywords: [веб-приложение, веб приложение, web-приложение, веб-сервис, личный кабинет, react, vue, django, fastapi, nextjs, next js]}
+      automation:   {keywords: [автоматизац, парсер, парсинг, скрипт, интеграц, api, google таблиц, google sheets, webhook, n8n, zapier]}
+      crm:          {keywords: [crm, срм, amocrm, битрикс24, учетн систем, внутренн систем, erp]}
+      support:      {keywords: [доработ, исправить, баг, модерниз, редизайн, поддержка сайта, перенести сайт]}
+    intent_keywords: [ищу, ищем, нужен, нужна, нужно, требуется, требуются, кто может, кто сделает, кто возьмется,
+                      хочу заказать, заказать, техническое задание, тз]
+    offer_markers: [сделаю, разработаю, создам, предлагаю услуги, мои услуги, ищу заказы, ищу заказчиков, беру заказы,
+                    возьму заказ, мое портфолио, моё портфолио]
+    stop_words: [в штат, оклад, полный рабочий день, резюме, стажировк, казино, ставки на спорт, букмекер, закладк,
+                 обнал, накрутк, без оплаты, за отзыв, даркнет, взлом, 18+]
+    spam_markers: [заработок от, доход от, пассивный доход, подписывайся, розыгрыш, промокод, арбитраж трафика, реферал]
+    urgency_keywords: [срочно, сегодня, до завтра, в кратчайшие сроки, asap, горит]
+    business_markers: [компания, компании, ооо, бизнес, магазин, студия, салон, клиника, ресторан, школа, агентство, производство]
+    hard_markers: [1с, 1c, unity, unreal, микроконтроллер, arduino, embedded, fpga, plc, solidity, смарт-контракт, в офис]
+  organizations:
+    thresholds: {high: 60, medium: 40, low: 25}
+    category_weights: {beauty: 20, dance: 20, education: 15, medical: 15, fitness: 15, restaurant: 12, cafe: 10, shops: 10}
+    weights:
+      base: 10
+      no_website: 35
+      site_unreachable: 30
+      no_https: 10
+      no_viewport: 15
+      outdated: 15
+      no_booking: 10
+      has_contacts: 10
+      no_contacts_penalty: 20
+
+integrations:
+  notion:
+    enabled: true                           # работает, если заданы NOTION_TOKEN и NOTION_DATABASE_ID
+    max_per_run: 60
+  webhook:                                  # Make / n8n / любой сервис с входящим webhook
+    type: webhook
+    enabled: false
+    max_per_run: 10
+    monthly_quota: 300                      # своя страховка, чтобы не выбрать бесплатный лимит сервиса
+    fields: [lead_id, kind, title, description, source, url, budget, currency, project_type, score, relevance]
+    route: {min_relevance: high, kinds: [order, organization], exclude_sources: []}
+  hunter:                                   # Hunter.io: email-адреса компаний по домену (50 кредитов/мес бесплатно)
+    type: hunter
+    enabled: false
+    max_per_run: 3
+    monthly_quota: 25
+    route: {min_relevance: medium, kinds: [organization]}
+
+notifications:
+  notify_min_relevance: [high, medium]
+  max_lead_messages_per_run: 8              # остальное — одним дайджестом
+  notify_after_failures: 2                  # сообщать об источнике после N сбоев подряд
+  error_cooldown_hours: 6                   # одна и та же ошибка — не чаще
+  send_daily_summary: true                  # сводка «за сутки» — не чаще раза в 20 часов
+
+storage:
+  restore_days: 30                          # глубина восстановления из Notion, если кэш потерян
+  keep_log_days: 90
+
+diagnostics:
+  inactivity_warn_days: 50                  # предупредить до автоотключения расписания GitHub (60 дней)
