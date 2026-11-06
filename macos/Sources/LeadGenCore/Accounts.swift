@@ -87,6 +87,14 @@ public final class LocalAuthService: AuthService {
                            lastLoginAt: ISODate.parse(r["last_login_at"]?.string))
     }
 
+    /// Все локальные учётные записи (для переноса их данных в облачную).
+    public func allAccounts() -> [UserAccount] {
+        ((try? db.query("SELECT username, created_at, last_login_at FROM users ORDER BY username_key")) ?? []).map {
+            UserAccount(username: $0["username"]?.string ?? "", createdAt: ISODate.parse($0["created_at"]?.string),
+                        lastLoginAt: ISODate.parse($0["last_login_at"]?.string))
+        }
+    }
+
     public func register(username: String, password: String) throws -> UserAccount {
         guard let name = Self.normalized(username) else { throw AuthError.invalidUsername }
         guard password.count >= 8 else { throw AuthError.weakPassword }

@@ -190,6 +190,54 @@ extension LeadStore: SyncLocalStore {
         try db.run("DELETE FROM kv WHERE key LIKE 'sync.cursor.%'")
     }
 
+    // MARK: Перенос локальной базы
+
+    /// Время изменения для перенесённых данных: раньше любых изменений в облаке, поэтому
+    /// перенос не затирает то, что уже правилось на других устройствах.
+    public static let importStamp = Date(timeIntervalSince1970: 946_684_800)  // 2000-01-01
+
+    /// Копирует в эту базу лиды, исключения и синхронизируемые настройки из другой базы и
+    /// отмечает их для выгрузки. Источник только читается. Лиды, которые уже есть здесь
+    /// (тот же id или тот же отпечаток), не дублируются. Возвращает число добавленных лидов.
+    @discardableResult
+    public func importFrom(_ src: LeadStore) throws -> Int {
+        let ts = Self.stamp(Self.importStamp)
+        var added = 0
+        let leads = try src.db.query("""
+            SELECT lead_id, fingerprint, kind, source, title, score, relevance, discovered_at, updated_at, data_json,
+                   imported_at, favorite, archived, deleted, excluded, seen, note FROM leads
+            """)
+        let exclusions = try src.exclusions()
+        try db.transaction {
+            for r in leads {
+                guard let id = r["lead_id"]?.string else { continue }
+                let fp = r["fingerprint"]?.string ?? ""
+                let dup = try db.query("SELECT 1 FROM leads WHERE lead_id=? OR (?<>'' AND fingerprint=?)",
+                                       [.text(id), .text(fp), .text(fp)])
+                if !dup.isEmpty { continue }
+                let cols = ["lead_id", "fingerprint", "kind", "source", "title", "score", "relevance", "discovered_at",
+                            "updated_at", "data_json", "imported_at", "favorite", "archived", "deleted", "excluded", "seen", "note"]
+                try db.run("INSERT INTO leads(\(cols.joined(separator: ","))) VALUES(\(cols.map { _ in "?" }.joined(separator: ",")))",
+                           cols.map { r[$0] ?? .null })
+                try markDirty("lead", id, Self.leadFields, at: ts)
+                added += 1
+            }
+            for e in exclusions {
+                try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",
+                           [.text(e.kind.rawValue), .text(e.value), .text(ISODate.now())])
+                try markDirty("exclusion", "\(e.kind.rawValue)|\(e.value)", ["deleted"], at: ts)
+            }
+            for k in Self.syncedKeys where value(k) == nil {
+                if let v = src.value(k) {
+                    try db.run("INSERT INTO kv(key, value) VALUES(?,?)", [.text(k), .text(v)])
+                    try markDirty("setting", k, ["value"], at: ts)
+                }
+            }
+        }
+        try applyExclusions()
+        return added
+    }
+
     // MARK: Настройки в облаке
 
     /// Записать синхронизируемую настройку (JSON-текст) и отметить её для выгрузки.

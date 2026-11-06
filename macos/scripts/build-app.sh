@@ -16,6 +16,17 @@ APP="$OUT/Lead Generator.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LeadGenerator"
+# Облако (необязательно): адрес проекта Supabase и ПУБЛИЧНЫЙ ключ (anon / publishable).
+# Секретный ключ (service_role / sb_secret_) сюда никогда не передаётся — приложение его отвергнет.
+# Без этих переменных собирается версия только с локальными учётными записями.
+CLOUD_KEYS=""
+if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_ANON_KEY:-}" ]]; then
+  if [[ "$SUPABASE_ANON_KEY" == sb_secret_* || ! "$SUPABASE_URL" =~ ^https://[A-Za-z0-9.-]+/?$ ]]; then
+    echo "SUPABASE_URL должен быть https-адресом, SUPABASE_ANON_KEY — публичным ключом" >&2; exit 1
+  fi
+  CLOUD_KEYS="  <key>LGSupabaseURL</key><string>${SUPABASE_URL%/}</string>
+  <key>LGSupabaseAnonKey</key><string>${SUPABASE_ANON_KEY}</string>"
+fi
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -34,6 +45,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array><dict>
+    <key>CFBundleURLName</key><string>local.leadgenerator.app.auth</string>
+    <key>CFBundleURLSchemes</key><array><string>leadgenerator</string></array>
+  </dict></array>
+${CLOUD_KEYS}
 </dict>
 </plist>
 PLIST

@@ -260,6 +260,33 @@ final class StoreSyncTests: XCTestCase {
         XCTAssertTrue(try s.pendingChanges(limit: 10).isEmpty)
     }
 
+    func testImportLocalAccountCopiesWithoutDuplicatesAndEarlyStamp() throws {
+        let local = try LeadStore(path: dir.appendingPathComponent("local-src.db").path)
+        try local.save(Self.lead("Первый"), id: "A", fingerprint: "fpA")
+        try local.save(Self.lead("Второй"), id: "B", fingerprint: "fpB")
+        try local.setFavorite(["A"], true)
+        try local.addExclusion(.domain, "spam.ru")
+        try local.setValue("draft.signature", "\"Подпись\"")
+        let cloud = try store("cloud")
+        try cloud.save(Self.lead("Уже в облаке"), id: "B2", fingerprint: "fpB")   // тот же отпечаток
+        try cloud.markPushed(try cloud.pendingChanges(limit: 100))
+
+        XCTAssertEqual(try cloud.importFrom(local), 1)
+        XCTAssertEqual(try cloud.allLeads().map(\.id).sorted(), ["A", "B2"])
+        XCTAssertEqual(try cloud.allLeads().first { $0.id == "A" }?.favorite, true)
+        XCTAssertEqual(cloud.value("draft.signature"), "\"Подпись\"")
+        let p = try cloud.pendingChanges(limit: 100)
+        XCTAssertEqual(p.leads.map(\.lead_id), ["A"])
+        XCTAssertEqual(p.leads[0].ts["favorite"], LeadStore.stamp(LeadStore.importStamp))
+        XCTAssertEqual(p.exclusions.map(\.value), ["spam.ru"])
+        XCTAssertEqual(p.settings.map(\.key), ["draft.signature"])
+        // Источник не изменился и журнала не ведёт.
+        XCTAssertEqual(try local.allLeads().count, 2)
+        XCTAssertFalse(local.syncTracking)
+        // Повторный перенос ничего не дублирует.
+        XCTAssertEqual(try cloud.importFrom(local), 0)
+    }
+
     func testLocalOnlyAccountsDoNotJournal() throws {
         let s = try LeadStore(path: dir.appendingPathComponent("local.db").path)
         try s.save(Self.lead(), id: "L1", fingerprint: "fp")
