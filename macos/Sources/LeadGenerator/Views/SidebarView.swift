@@ -14,7 +14,7 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var model = model
         VStack(spacing: 0) {
-            List(selection: Binding(get: { Optional(model.section) }, set: { if let s = $0 { model.section = s } })) {
+            List(selection: Binding(get: { Optional(model.section) }, set: { if let s = $0, s != model.section { model.section = s } })) {
                 Section {
                     row(.home)
                     row(.all, count: model.count(.all))

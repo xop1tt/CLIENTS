@@ -43,7 +43,9 @@ struct LeadsView: View {
 
     private var table: some View {
         @Bindable var model = model
-        return Table(items, selection: $model.selection, sortOrder: $sortOrder) {
+        return Table(items, selection: Binding(get: { model.selection },
+                                               set: { if $0 != model.selection { model.selection = $0 } }),
+                     sortOrder: $sortOrder) {
             TableColumn("") { (l: LeadItem) in
                 Button { model.toggleFavorite([l.id]) } label: {
                     Image(systemName: l.favorite ? "star.fill" : "star")
