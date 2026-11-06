@@ -7,7 +7,6 @@ struct LeadsView: View {
     @Environment(\.appModel) private var model
     @Environment(\.look) private var look
     @State private var sortOrder: [KeyPathComparator<LeadItem>] = [KeyPathComparator(\LeadItem.score, order: .reverse)]
-    @State private var exportShown = false
 
     private var items: [LeadItem] { model.visibleLeads.sorted(using: sortOrder) }
 
@@ -28,11 +27,6 @@ struct LeadsView: View {
         }
         .navigationTitle(model.section.title)
         .navigationSubtitle("\(items.count)")
-        .sheet(isPresented: $exportShown) {
-            ExportSheet(items: model.selection.isEmpty ? items : items.filter { model.selection.contains($0.id) })
-                .environment(\.appModel, model)
-                .environment(\.look, look)
-        }
         .onChange(of: model.selection) { _, ids in
             // Открытый лид считается просмотренным.
             if ids.count == 1 { model.markSeen(ids) }
@@ -147,7 +141,11 @@ struct LeadsView: View {
             } else {
                 Button("В архив") { model.setArchived(ids, true) }
             }
-            Button("Экспортировать…") { model.selection = ids; exportShown = true }
+            Menu("Экспорт в…") {
+                ForEach(ExportTab.allCases) { t in
+                    Button(t.menuTitle) { model.selection = ids; model.openExport(t) }
+                }
+            }
             if let one {
                 Divider()
                 if let domain = one.data.domain { Button("Исключить домен \(domain)") { model.exclude(.domain, domain) } }
@@ -209,9 +207,8 @@ struct LeadsView: View {
                 Button("Сбросить") { model.filter = LeadFilter(search: model.filter.search) }
                     .buttonStyle(.link)
             }
-            Button { exportShown = true } label: { Label("Экспорт", systemImage: "square.and.arrow.up") }
-                .labelStyle(.titleAndIcon)
-                .help("Экспорт выбранных или всех показанных лидов")
+            ExportMenuButton(model: model)
+                .help("Экспорт выбранных или всех показанных лидов: файл, Bitrix24, Notion, вебхук")
         }
         .labelsHidden()
         .appFont(12)
@@ -223,7 +220,7 @@ struct LeadsView: View {
         HStack(spacing: 14) {
             Text("Выбрано: \(model.selection.count)").appFont(12.5, .semibold)
             Button { model.toggleFavorite(model.selection) } label: { Label("В избранное", systemImage: "star") }
-            Button { exportShown = true } label: { Label("Экспорт", systemImage: "square.and.arrow.up") }
+            ExportMenuButton(model: model)
             if model.section == .archive {
                 Button { model.setArchived(model.selection, false) } label: { Label("Из архива", systemImage: "tray.and.arrow.up") }
             } else {
@@ -271,46 +268,20 @@ struct LeadsView: View {
 
 // MARK: - Экспорт
 
-struct ExportSheet: View {
-    @Environment(\.appModel) private var model
-    @Environment(\.dismiss) private var dismiss
-    let items: [LeadItem]
-    @State private var format: ExportFormat = .csv
-    @State private var fields: Set<ExportField> = Set(ExportField.defaults)
-
+/// Кнопка «Экспорт в…»: нажатие открывает последнюю вкладку, стрелка — список назначений.
+struct ExportMenuButton: View {
+    let model: AppModel
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Экспорт лидов: \(items.count)").appFont(15, .semibold)
-            Picker("Формат", selection: $format) {
-                ForEach(ExportFormat.allCases) { Text($0.title).tag($0) }
+        Menu {
+            ForEach(ExportTab.allCases) { t in
+                Button { model.openExport(t) } label: { Label(t.menuTitle, systemImage: t.icon) }
             }
-            .pickerStyle(.segmented)
-            Text("Поля").appFont(12, .medium).foregroundStyle(.secondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], alignment: .leading, spacing: 6) {
-                ForEach(ExportField.allCases) { f in
-                    Toggle(f.title, isOn: Binding(get: { fields.contains(f) }, set: { if $0 { fields.insert(f) } else { fields.remove(f) } }))
-                        .toggleStyle(.checkbox)
-                }
-            }
-            Text("XLSX, PDF и XML появятся в следующей версии. CSV открывается в Excel и Numbers.")
-                .appFont(11).foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Сохранить…") { save() }.keyboardShortcut(.defaultAction).disabled(fields.isEmpty || items.isEmpty)
-            }
+        } label: {
+            Label("Экспорт в…", systemImage: "square.and.arrow.up")
+        } primaryAction: {
+            model.openExport()
         }
-        .padding(20)
-        .frame(width: 560)
-    }
-
-    private func save() {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "leads.\(format.fileExtension)"
-        panel.allowedContentTypes = [format == .csv ? .commaSeparatedText : .json]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let ordered = ExportField.allCases.filter(fields.contains)
-        model.export(items, format: format, fields: ordered, to: url)
-        dismiss()
+        .menuStyle(.button)
+        .fixedSize()
     }
 }

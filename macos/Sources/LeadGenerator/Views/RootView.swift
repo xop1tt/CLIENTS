@@ -46,6 +46,11 @@ struct RootView: View {
                 }
             }
         }
+        .sheet(item: $model.exportTab) { tab in
+            ExportSheet(items: model.exportItems, tab: tab)
+                .environment(\.appModel, model)
+                .environment(\.look, look)
+        }
         .overlay {
             if let e = model.startupError {
                 ContentUnavailableView("База недоступна", systemImage: "externaldrive.badge.exclamationmark", description: Text(e))

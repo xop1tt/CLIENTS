@@ -71,6 +71,8 @@ final class AppModel {
     var filter = LeadFilter() { didSet { if oldValue != filter { selection = [] } } }
     var selection: Set<String> = []
     var inspectorShown = true
+    /// Открытое окно «Экспорт в…» и его вкладка. Меняется только по действию пользователя.
+    var exportTab: ExportTab?
     var selectedSource: String? = SourceKey.rss
 
     var lastMessage: String?

@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT="${1:-build}"
-VERSION="${LEADGEN_VERSION:-1.0.7}"
+VERSION="${LEADGEN_VERSION:-1.0.8}"
 
 ARCH_FLAGS=()
 if [[ "${UNIVERSAL:-0}" == "1" ]]; then ARCH_FLAGS=(--arch arm64 --arch x86_64); fi
