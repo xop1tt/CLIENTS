@@ -66,7 +66,7 @@ swift test                     # тесты ядра
 open "build/Lead Generator.app"
 ```
 
-Иконка: исходник `Resources/AppIcon.svg`, растр `Resources/AppIcon-1024.png` (из него при сборке получается `AppIcon.icns`).
+Иконка: исходники `Resources/AppIcon.svg` и `AppIcon-Dark.svg`, растры `AppIcon-1024.png` (из него при сборке получается `AppIcon.icns`) и `AppIcon-Dark-1024.png` (тёмная версия, приложение ставит её в Dock при тёмной теме macOS).
 
 Для разработки: `open Package.swift` откроет проект в Xcode, схема `LeadGenerator`.
 

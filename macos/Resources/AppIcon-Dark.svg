@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A2F3A"/><stop offset="1" stop-color="#12151B"/>
+    </linearGradient>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5CC2FF"/><stop offset="0.5" stop-color="#2E9BF5"/><stop offset="1" stop-color="#1A78E0"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6B6B"/><stop offset="1" stop-color="#D92B2B"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4F66FF"/><stop offset="1" stop-color="#2233C9"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <filter id="mshadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0A2A5A" flood-opacity="0.55"/>
+    </filter>
+    <clipPath id="mag">
+      <path d="M 282 262 H 452 V 590 A 60 60 0 0 0 572 590 V 262 H 742 V 590 A 230 230 0 0 1 282 590 Z"/>
+    </clipPath>
+  </defs>
+  <g filter="url(#shadow)">
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  </g>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185" fill="none" stroke="#FFFFFF" stroke-opacity="0.10"/>
+  <g filter="url(#mshadow)">
+    <g clip-path="url(#mag)">
+      <rect x="260" y="250" width="504" height="600" fill="url(#body)"/>
+      <!-- блик -->
+      <path d="M 312 262 H 350 V 590 A 162 162 0 0 0 420 724 L 404 752 A 196 196 0 0 1 312 590 Z" fill="#FFFFFF" fill-opacity="0.35"/>
+      <!-- полюса -->
+      <rect x="282" y="262" width="170" height="150" fill="url(#red)"/>
+      <rect x="572" y="262" width="170" height="150" fill="url(#blue)"/>
+      <rect x="260" y="412" width="504" height="10" fill="#FFFFFF" fill-opacity="0.9"/>
+    </g>
+    <!-- плюс и минус -->
+    <rect x="337" y="325" width="60" height="22" rx="6" fill="#FFFFFF"/>
+    <rect x="356" y="306" width="22" height="60" rx="6" fill="#FFFFFF"/>
+    <rect x="627" y="325" width="60" height="22" rx="6" fill="#FFFFFF"/>
+  </g>
+</svg>

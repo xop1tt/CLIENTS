@@ -1,44 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#4F7BFF"/>
-      <stop offset="0.55" stop-color="#5B3FF0"/>
-      <stop offset="1" stop-color="#3A1C9E"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E9EEF5"/>
     </linearGradient>
-    <radialGradient id="glow" cx="0.3" cy="0.18" r="0.75">
-      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.32"/>
-      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="metal" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#E3E6FF"/>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5CC2FF"/><stop offset="0.5" stop-color="#2E9BF5"/><stop offset="1" stop-color="#1A78E0"/>
     </linearGradient>
-    <linearGradient id="tip" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFB547"/>
-      <stop offset="1" stop-color="#FF6A3D"/>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FF6B6B"/><stop offset="1" stop-color="#D92B2B"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4F66FF"/><stop offset="1" stop-color="#2233C9"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000" flood-opacity="0.28"/>
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000" flood-opacity="0.25"/>
     </filter>
-    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="10" stdDeviation="14" flood-color="#1B0B5A" flood-opacity="0.45"/>
+    <filter id="mshadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0A2A5A" flood-opacity="0.18"/>
     </filter>
-    <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <clipPath id="mag">
+      <path d="M 282 262 H 452 V 590 A 60 60 0 0 0 572 590 V 262 H 742 V 590 A 230 230 0 0 1 282 590 Z"/>
+    </clipPath>
   </defs>
   <g filter="url(#shadow)">
     <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
   </g>
-  <g clip-path="url(#sq)">
-    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185" fill="none" stroke="#000000" stroke-opacity="0.06"/>
+  <g filter="url(#mshadow)">
+    <g clip-path="url(#mag)">
+      <rect x="260" y="250" width="504" height="600" fill="url(#body)"/>
+      <!-- блик -->
+      <path d="M 312 262 H 350 V 590 A 162 162 0 0 0 420 724 L 404 752 A 196 196 0 0 1 312 590 Z" fill="#FFFFFF" fill-opacity="0.35"/>
+      <!-- полюса -->
+      <rect x="282" y="262" width="170" height="150" fill="url(#red)"/>
+      <rect x="572" y="262" width="170" height="150" fill="url(#blue)"/>
+      <rect x="260" y="412" width="504" height="10" fill="#FFFFFF" fill-opacity="0.9"/>
+    </g>
+    <!-- плюс и минус -->
+    <rect x="337" y="325" width="60" height="22" rx="6" fill="#FFFFFF"/>
+    <rect x="356" y="306" width="22" height="60" rx="6" fill="#FFFFFF"/>
+    <rect x="627" y="325" width="60" height="22" rx="6" fill="#FFFFFF"/>
   </g>
-  <!-- магнит, раскрытый вправо вверх -->
-  <g transform="rotate(45 512 512) translate(0 40)" filter="url(#soft)">
-    <path d="M 392 330 V 520 A 120 120 0 0 0 632 520 V 330" fill="none" stroke="url(#metal)" stroke-width="112"/>
-    <rect x="336" y="262" width="112" height="78" fill="url(#tip)"/>
-    <rect x="576" y="262" width="112" height="78" fill="url(#tip)"/>
-  </g>
-  <!-- притягиваемые лиды -->
-  <circle cx="700" cy="330" r="44" fill="#FFC857" filter="url(#soft)"/>
-  <circle cx="782" cy="246" r="28" fill="#FFFFFF" fill-opacity="0.85"/>
-  <circle cx="836" cy="190" r="16" fill="#FFFFFF" fill-opacity="0.55"/>
 </svg>

@@ -37,7 +37,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-# Иконка: из Resources/AppIcon-1024.png (исходник Resources/AppIcon.svg) собирается AppIcon.icns.
+# Иконка: из Resources/AppIcon-1024.png (исходник Resources/AppIcon.svg) собирается AppIcon.icns,
+# тёмная версия — Resources/AppIcon-Dark-1024.png (исходник AppIcon-Dark.svg).
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
@@ -45,6 +46,8 @@ for s in 16 32 128 256 512; do
   sips -z $((s*2)) $((s*2)) Resources/AppIcon-1024.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+# Тёмный вариант: приложение ставит его в Dock, когда в macOS включена тёмная тема.
+sips -z 512 512 Resources/AppIcon-Dark-1024.png --out "$APP/Contents/Resources/AppIcon-Dark.png" >/dev/null
 
 # Локальная (ad-hoc) подпись: без платного Apple Developer ID. При первом запуске скачанной сборки
 # macOS попросит подтверждение: правый клик по приложению → «Открыть».
