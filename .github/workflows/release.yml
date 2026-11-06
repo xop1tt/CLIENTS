@@ -1,0 +1,53 @@
+name: Release
+
+# Релиз создаётся пушем тега вида v1.0.0: собирается приложение для macOS
+# и прикрепляется к GitHub Release вместе с заметками из .github/release-notes/<тег>.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write # только для создания релиза и загрузки файла
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Tests (core)
+        working-directory: macos
+        run: swift test
+
+      - name: Build app
+        working-directory: macos
+        env:
+          UNIVERSAL: "1"
+          TAG: ${{ github.ref_name }}
+        run: |
+          export LEADGEN_VERSION="${TAG#v}"
+          ./scripts/build-app.sh build
+          ditto -c -k --keepParent "build/Lead Generator.app" "build/Lead-Generator-${TAG}-macOS.zip"
+          shasum -a 256 "build/Lead-Generator-${TAG}-macOS.zip" | tee "build/Lead-Generator-${TAG}-macOS.zip.sha256"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes=".github/release-notes/${TAG}.md"
+          args=(--title "Lead Generator ${TAG#v}" --verify-tag)
+          if [ -f "$notes" ]; then args+=(--notes-file "$notes"); else args+=(--generate-notes); fi
+          gh release create "$TAG" \
+            "macos/build/Lead-Generator-${TAG}-macOS.zip" \
+            "macos/build/Lead-Generator-${TAG}-macOS.zip.sha256" \
+            "${args[@]}"
