@@ -37,7 +37,7 @@ jobs:
           export LEADGEN_VERSION="${TAG#v}"
           ./scripts/build-app.sh build
           ditto -c -k --keepParent "build/Lead Generator.app" "build/Lead-Generator-${TAG}-macOS.zip"
-          shasum -a 256 "build/Lead-Generator-${TAG}-macOS.zip" | tee "build/Lead-Generator-${TAG}-macOS.zip.sha256"
+          (cd build && shasum -a 256 "Lead-Generator-${TAG}-macOS.zip" | tee "Lead-Generator-${TAG}-macOS.zip.sha256")
 
       - name: Publish release
         env:
