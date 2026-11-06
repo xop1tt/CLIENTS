@@ -1,0 +1,88 @@
+name: Cloud
+
+# Серверная часть (миграции Supabase, функции писем) и облачный модуль приложения проверяются
+# на одноразовом локальном стенде прямо в раннере: PostgreSQL, Supabase Auth и PostgREST в
+# Docker, функции в Deno, тестовый SMTP. Никакие облачные проекты и секреты не используются.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - "macos/Sources/LeadCloud/**"
+      - "macos/Sources/LeadGenCore/**"
+      - "macos/Sources/CSQLite/**"
+      - "macos/Tests/LeadCloudTests/**"
+      - "macos/scripts/linux-cloud-tests.sh"
+      - ".github/workflows/cloud.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "macos/Sources/LeadCloud/**"
+      - "macos/Sources/LeadGenCore/**"
+      - "macos/Sources/CSQLite/**"
+      - "macos/Tests/LeadCloudTests/**"
+      - "macos/scripts/linux-cloud-tests.sh"
+      - ".github/workflows/cloud.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cloud:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30
+    env:
+      PGHOST: 127.0.0.1
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DENO: ${{ github.workspace }}/.deno/node_modules/.bin/deno
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: supabase/tests/requirements.txt
+      - run: pip install -r supabase/tests/requirements.txt
+      - name: Deno
+        run: npm install --prefix .deno --no-save --no-audit --no-fund deno@2.5.6 && "$DENO" --version
+
+      - name: Functions (unit tests, type check)
+        working-directory: supabase/functions
+        run: |
+          "$DENO" test --allow-env _shared/shared_test.ts
+          "$DENO" check send-email/index.ts email-gate/index.ts delete-account/index.ts
+
+      - name: Start local stack
+        run: supabase/tests/stack/up.sh
+
+      - name: Server tests (auth, email limits, RLS, sync)
+        run: python -m pytest supabase/tests -q -p no:cacheprovider
+
+      - name: Swift cloud module on Linux (unit + end-to-end on the stack)
+        run: |
+          source supabase/tests/stack/env.sh
+          docker run --rm --network host -v "$PWD/macos":/src -v "$STACK_MAIL_DIR":"$STACK_MAIL_DIR" -w /src \
+            -e LG_STACK_URL="$SUPABASE_URL" -e LG_STACK_ANON="$SUPABASE_ANON_KEY" -e LG_STACK_MAIL="$STACK_MAIL_DIR" \
+            swift:6.1-noble bash -c "apt-get update -qq && apt-get install -y -qq libsqlite3-dev >/dev/null && ./scripts/linux-cloud-tests.sh"
+
+      - name: Stack logs on failure
+        if: failure()
+        run: |
+          docker logs lg-gotrue 2>&1 | tail -50 || true
+          tail -50 supabase/tests/stack/.run/*.log || true
