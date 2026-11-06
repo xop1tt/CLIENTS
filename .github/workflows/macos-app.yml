@@ -34,6 +34,9 @@ jobs:
           UNIVERSAL: "1"
         run: ./scripts/build-app.sh build
 
+      - name: Smoke test (launch)
+        run: ./scripts/smoke-test.sh
+
       - name: Pack
         run: ditto -c -k --keepParent "build/Lead Generator.app" "build/Lead-Generator-macOS.zip"
 

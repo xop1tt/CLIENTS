@@ -22,8 +22,7 @@ struct LeadGeneratorApp: App {
         WindowGroup("Lead Generator", id: "main") {
             RootView()
                 .environment(model)
-                .environment(look)
-                .modifier(LookRoot())
+                .modifier(LookRoot(look: look))
                 .frame(minWidth: 980, minHeight: 620)
                 .onAppear { look.apply() }
         }
@@ -70,8 +69,7 @@ struct LeadGeneratorApp: App {
         Settings {
             SettingsView()
                 .environment(model)
-                .environment(look)
-                .modifier(LookRoot())
+                .modifier(LookRoot(look: look))
         }
     }
 }
