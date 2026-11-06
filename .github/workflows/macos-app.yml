@@ -1,7 +1,9 @@
 name: macOS app
 
+# Ветка PR собирается один раз (событие pull_request), main — после слияния.
 on:
   push:
+    branches: [main]
     paths: ["macos/**", ".github/workflows/macos-app.yml"]
   pull_request:
     paths: ["macos/**", ".github/workflows/macos-app.yml"]
@@ -9,6 +11,11 @@ on:
 
 permissions:
   contents: read
+
+# Новый коммит в ту же ветку отменяет устаревшую сборку.
+concurrency:
+  group: macos-app-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -26,12 +33,22 @@ jobs:
       - name: Toolchain
         run: swift --version
 
+      # Кэш сборки SwiftPM: повторные сборки компилируют только изменённое.
+      - name: Cache SwiftPM build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: macos/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
+
       - name: Tests (core)
         run: swift test
 
       - name: Build app
         env:
-          UNIVERSAL: "1"
+          # Универсальная сборка (arm64 + x86_64) — только для main; в PR хватает одной архитектуры.
+          UNIVERSAL: ${{ github.event_name == 'pull_request' && '0' || '1' }}
         run: ./scripts/build-app.sh build
 
       - name: Smoke test (launch)
