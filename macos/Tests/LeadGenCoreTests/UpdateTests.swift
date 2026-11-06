@@ -88,3 +88,11 @@ final class UpdatesTests: XCTestCase {
         XCTAssertEqual(try Updates.sha256(of: url), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 }
+
+final class FourPartVersionTests: XCTestCase {
+    func testPatchOfPatchIsNewer() {
+        XCTAssertEqual(AppVersion("v1.0.6.1")?.parts, [1, 0, 6, 1])
+        XCTAssertLessThan(AppVersion("1.0.6")!, AppVersion("1.0.6.1")!)
+        XCTAssertLessThan(AppVersion("1.0.6.1")!, AppVersion("1.0.7")!)
+    }
+}

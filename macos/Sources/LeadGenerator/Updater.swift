@@ -27,14 +27,37 @@ final class UpdateController {
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var pending: AvailableUpdate?
+    /// Последняя автоматическая попытка, в том числе неудачная (нет сети, GitHub недоступен).
+    @ObservationIgnored private var lastAttempt: Date?
 
     static let autoKey = "updates.auto"
+    static let intervalKey = "updates.intervalHours"
+    /// Варианты частоты автоматической проверки, в часах.
+    struct Interval: Hashable {
+        let hours: Int
+        let title: String
+    }
+    static let intervals: [Interval] = [
+        Interval(hours: 1, title: "Каждый час"), Interval(hours: 3, title: "Каждые 3 часа"),
+        Interval(hours: 6, title: "Каждые 6 часов"), Interval(hours: 12, title: "Каждые 12 часов"),
+        Interval(hours: 24, title: "Раз в сутки"), Interval(hours: 168, title: "Раз в неделю"),
+    ]
     private static let skipKey = "updates.skip"
     private static let lastKey = "updates.lastCheck"
 
     var automatic: Bool {
         get { access(keyPath: \.automatic); return defaults.object(forKey: Self.autoKey) as? Bool ?? true }
         set { withMutation(keyPath: \.automatic) { defaults.set(newValue, forKey: Self.autoKey) } }
+    }
+
+    /// Как часто проверять обновления, в часах (по умолчанию раз в сутки).
+    var intervalHours: Int {
+        get {
+            access(keyPath: \.intervalHours)
+            let h = defaults.integer(forKey: Self.intervalKey)
+            return Self.intervals.contains { $0.hours == h } ? h : 24
+        }
+        set { withMutation(keyPath: \.intervalHours) { defaults.set(newValue, forKey: Self.intervalKey) } }
     }
 
     /// Версия этой сборки. Нет у запуска без .app (swift run): тогда обновление выключено.
@@ -48,18 +71,23 @@ final class UpdateController {
 
     // MARK: Проверка
 
-    /// Через полминуты после запуска и затем каждые 6 часов; сама проверка — не чаще раза в 20 часов.
+    /// Через полминуты после запуска и затем каждые 10 минут смотрим, не пора ли проверить.
+    /// Сама проверка идёт с выбранной частотой (публичный API GitHub разрешает 60 запросов в час).
     func startAutomaticChecks() {
         guard canUpdate else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in self?.automaticCheck() }
-        timer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.automaticCheck() }
         }
     }
 
     private func automaticCheck() {
         guard automatic else { return }
-        if let lastCheck, Date().timeIntervalSince(lastCheck) < 20 * 3600 { return }
+        // Небольшой запас, чтобы проверка «раз в час» не сдвигалась на следующий тик таймера.
+        if let lastCheck, Date().timeIntervalSince(lastCheck) < Double(intervalHours) * 3600 - 300 { return }
+        // После неудачи (lastCheck не обновился) повторяем не чаще раза в час, а не на каждом тике.
+        if let lastAttempt, Date().timeIntervalSince(lastAttempt) < 3600 - 300 { return }
+        lastAttempt = Date()
         check(manual: false)
     }
 
