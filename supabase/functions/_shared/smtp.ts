@@ -133,9 +133,10 @@ async function withTimeout<T>(ms: number, p: Promise<T>, onTimeout: () => void):
 }
 
 /** Отправляет письма одним соединением. Возвращает адреса, которые сервер принял. */
-export async function sendMail(cfg: SmtpConfig, mails: Mail[]): Promise<string[]> {
+/** Отправляет письма по одному соединению. Принятые сервером адреса добавляются в `sent`
+ *  сразу, поэтому при ошибке на втором письме вызывающий знает, что первое уже ушло. */
+export async function sendMail(cfg: SmtpConfig, mails: Mail[], sent: string[] = []): Promise<string[]> {
   let raw: Deno.Conn | undefined;
-  const sent: string[] = [];
   const run = async () => {
     raw = cfg.mode === "tls"
       ? await Deno.connectTls({ hostname: cfg.host, port: cfg.port })

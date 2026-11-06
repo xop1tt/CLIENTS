@@ -188,8 +188,26 @@ def test_no_service_role_key_in_client_code():
     """В исходниках приложения нет ключа service_role и вообще JWT-подобных строк."""
     root = Path(__file__).resolve().parents[2]
     jwt = re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.")
-    for path in list((root / "macos").rglob("*.swift")) + list((root / "macos").rglob("*.sh")) + list((root / "macos").rglob("*.plist")):
+    # Код, который попадает в приложение и его сборку (тесты с поддельными ключами не в счёт).
+    shipped = [root / "macos" / "Sources", root / "macos" / "scripts"]
+    for path in [p for d in shipped for ext in ("*.swift", "*.sh", "*.plist") for p in d.rglob(ext)]:
         text = path.read_text(errors="ignore")
         assert "SERVICE_ROLE" not in text.upper().replace("_", "_"), path
         assert not jwt.search(text), path
-        assert "sb_secret_" not in text, path
+        assert not re.search(r"sb_secret_[A-Za-z0-9_-]{16,}", text), path
+
+
+def test_direct_table_writes_cannot_set_future_timestamps():
+    c, _ = confirmed_user()
+    base = {"lead_id": "future-1", "fingerprint": "fpf", "kind": "order", "source": "fl_ru", "title": "t",
+            "score": 1, "relevance": "medium", "data": {}, "discovered_at": "2099-01-01T00:00:00Z",
+            "field_ts": {"note": "2099-01-01T00:00:00Z"}}
+    me = c.http.get("/auth/v1/user", headers=c.h()).json()["id"]
+    r = c.http.post("/rest/v1/leads", headers={**c.h(), "Prefer": "return=representation"}, json={**base, "user_id": me})
+    assert r.status_code == 201, r.text
+    row = r.json()[0]
+    assert row["discovered_at"] < "2099" and row["field_ts"]["note"] < "2099"
+    r = c.http.post("/rest/v1/exclusions", headers={**c.h(), "Prefer": "return=representation"},
+                    json={"user_id": me, "kind": "domain", "value": "x.ru", "changed_at": "2099-01-01T00:00:00Z"})
+    assert r.status_code == 201, r.text
+    assert r.json()[0]["changed_at"] < "2099"

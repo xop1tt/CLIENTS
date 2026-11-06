@@ -96,6 +96,17 @@ begin
     perform pg_advisory_xact_lock(hashtextextended('leadgen-sync:' || new.user_id::text, 0));
     new.server_seq := nextval('public.sync_seq');
     new.updated_at := now();
+    -- Время изменений не может быть в будущем, как бы строка ни записывалась (sync_push или
+    -- прямой запрос к таблице): иначе «будущее» поле навсегда выигрывало бы у всех устройств.
+    if tg_table_name = 'leads' then
+        new.discovered_at := least(new.discovered_at, now());
+        new.field_ts := coalesce((
+            select jsonb_object_agg(k, to_jsonb(least((v #>> '{}')::timestamptz, now())))
+            from jsonb_each(coalesce(new.field_ts, '{}'::jsonb)) as e(k, v)
+        ), '{}'::jsonb);
+    else
+        new.changed_at := least(new.changed_at, now());
+    end if;
     if tg_op = 'INSERT' then
         new.created_at := now();
     else
@@ -224,7 +235,7 @@ begin
             values (uid, item ->> 'lead_id', coalesce(item ->> 'fingerprint', ''), item ->> 'kind',
                     item ->> 'source', coalesce(item ->> 'title', ''), coalesce((item ->> 'score')::float8, 0),
                     coalesce(item ->> 'relevance', 'rejected'),
-                    coalesce((item ->> 'discovered_at')::timestamptz, server_now), item -> 'data',
+                    least(coalesce((item ->> 'discovered_at')::timestamptz, server_now), server_now), item -> 'data',
                     coalesce((item ->> 'favorite')::boolean, false), coalesce((item ->> 'archived')::boolean, false),
                     coalesce((item ->> 'deleted')::boolean, false), coalesce((item ->> 'seen')::boolean, false),
                     coalesce(item ->> 'note', ''), new_ts, p_device);

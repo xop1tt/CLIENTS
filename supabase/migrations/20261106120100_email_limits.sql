@@ -61,7 +61,9 @@ create table if not exists private.email_tickets (
     action text not null,
     email_hash text not null,
     consumed_at timestamptz,
-    consumed_by text
+    consumed_by text,
+    -- Письмо по талону не ушло (ошибка SMTP): талон не учитывается в интервалах и лимите адреса.
+    refunded boolean not null default false
 );
 create index if not exists email_tickets_lookup_idx on private.email_tickets (email_hash, action, expires_at) where consumed_at is null;
 
@@ -156,7 +158,8 @@ $$;
 -- Проверка лимитов адреса и общего лимита. Возвращает null, если отправить можно,
 -- иначе {reason, retry_after}.
 create or replace function private.check_email_limits(cfg private.email_limits, p_action text,
-                                                      p_email_hash text, p_recipients text[])
+                                                      p_email_hash text, p_recipients text[],
+                                                      p_skip_cooldown boolean default false)
 returns jsonb
 language plpgsql
 stable
@@ -178,7 +181,9 @@ begin
     select max(created_at), count(*) into last_at, prev_count
     from private.email_sends
     where email_hash = p_email_hash and action = p_action and status <> 'failed';
-    if p_action = 'signup' and prev_count < cfg.signup_initial_max then
+    if p_skip_cooldown then
+        null;  -- интервал уже проверил email-gate по выданным талонам
+    elsif p_action = 'signup' and prev_count < cfg.signup_initial_max then
         null;  -- первое письмо регистрации отправляется сразу
     elsif last_at is not null and last_at + cd > now() then
         return jsonb_build_object('reason', 'cooldown',
@@ -197,6 +202,48 @@ begin
     -- Общий лимит приложения.
     select count(*) into used from private.email_sends where status <> 'failed' and created_at >= day0;
     if used + coalesce(array_length(p_recipients, 1), 0) > cfg.global_daily_max then
+        return jsonb_build_object('reason', 'global_daily', 'retry_after', private.seconds_to_next_day(cfg.day_timezone));
+    end if;
+    return null;
+end;
+$$;
+
+-- Лимиты адреса для email-gate. Считаются по выданным талонам, а не по отправленным письмам:
+-- Auth не отправляет письмо несуществующему (или уже подтверждённому) адресу, и подсчёт по
+-- отправкам позволил бы через шлюз узнать, есть ли такой аккаунт. Талоны выдаются одинаково
+-- для любых адресов. Талон, письмо по которому не ушло из-за ошибки SMTP, не учитывается.
+create or replace function private.check_address_limits(cfg private.email_limits, p_action text, p_email_hash text)
+returns jsonb
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+    day0 timestamptz := private.day_start(cfg.day_timezone);
+    last_at timestamptz;
+    prev_count int;
+    used int;
+    cd interval := private.cooldown_for(cfg, p_action);
+begin
+    if not (p_action = any (cfg.enabled_actions)) then
+        return jsonb_build_object('reason', 'action_disabled', 'retry_after', null);
+    end if;
+    select max(created_at), count(*) into last_at, prev_count
+    from private.email_tickets
+    where email_hash = p_email_hash and action = p_action and not refunded;
+    if p_action = 'signup' and prev_count < cfg.signup_initial_max then
+        null;
+    elsif last_at is not null and last_at + cd > now() then
+        return jsonb_build_object('reason', 'cooldown',
+                                  'retry_after', ceil(extract(epoch from (last_at + cd - now())))::int);
+    end if;
+    select count(*) into used from private.email_tickets
+    where email_hash = p_email_hash and not refunded and created_at >= day0;
+    if used + 1 > cfg.per_email_daily_max then
+        return jsonb_build_object('reason', 'email_daily', 'retry_after', private.seconds_to_next_day(cfg.day_timezone));
+    end if;
+    select count(*) into used from private.email_sends where status <> 'failed' and created_at >= day0;
+    if used + 1 > cfg.global_daily_max then
         return jsonb_build_object('reason', 'global_daily', 'retry_after', private.seconds_to_next_day(cfg.day_timezone));
     end if;
     return null;
@@ -279,9 +326,10 @@ begin
         end if;
     end if;
 
-    -- Лимиты адреса и общий лимит (предварительно; окончательно — при отправке).
+    -- Лимиты адреса (по талонам, одинаково для любых адресов) и общий лимит
+    -- (предварительно; окончательно — при отправке).
     if verdict is null then
-        verdict := private.check_email_limits(cfg, p_action, eh, array[eh]);
+        verdict := private.check_address_limits(cfg, p_action, eh);
     end if;
 
     insert into private.email_requests (action, email_hash, device_hash, ip_hash, allowed, reason)
@@ -353,7 +401,7 @@ begin
         end if;
     end if;
 
-    verdict := private.check_email_limits(cfg, p_action, owner_hash, hashes);
+    verdict := private.check_email_limits(cfg, p_action, owner_hash, hashes, p_skip_cooldown => ticket is not null);
     if verdict is not null then
         return jsonb_build_object('allowed', false) || verdict;
     end if;
@@ -361,7 +409,7 @@ begin
     insert into private.email_sends (webhook_id, action, email_hash, ticket_id)
     select p_webhook_id, p_action, h, ticket from unnest(hashes) h;
     if ticket is not null then
-        update private.email_tickets set consumed_at = now(), consumed_by = p_webhook_id where id = ticket;
+        update private.email_tickets set consumed_at = now(), consumed_by = p_webhook_id, refunded = false where id = ticket;
     end if;
     return jsonb_build_object('allowed', true, 'duplicate', false);
 end;
@@ -387,7 +435,7 @@ begin
     where webhook_id = p_webhook_id and status = 'reserved'
       and email_hash in (select private.sha(private.normalize_email(x)) from unnest(coalesce(p_failed, '{}')) x);
     if not exists (select 1 from private.email_sends where webhook_id = p_webhook_id and status <> 'failed') then
-        update private.email_tickets set consumed_at = null, consumed_by = null where consumed_by = p_webhook_id;
+        update private.email_tickets set consumed_at = null, consumed_by = null, refunded = true where consumed_by = p_webhook_id;
     end if;
 end;
 $$;

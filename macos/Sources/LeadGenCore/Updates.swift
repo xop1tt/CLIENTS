@@ -1,5 +1,10 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#endif
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Номер версии вида 1.0.4 (тег v1.0.4 тоже понимается).
 public struct AppVersion: Comparable, CustomStringConvertible, Sendable {
@@ -135,6 +140,7 @@ public enum Updates {
         s.count == 64 && s.allSatisfy { $0.isHexDigit }
     }
 
+    #if canImport(CryptoKit)  // на Linux (облачные тесты ядра) CryptoKit нет; приложению он есть всегда
     /// SHA-256 файла, читается по частям.
     public static func sha256(of url: URL) throws -> String {
         let handle = try FileHandle(forReadingFrom: url)
@@ -143,4 +149,5 @@ public enum Updates {
         while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty { hasher.update(data: chunk) }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
+    #endif
 }

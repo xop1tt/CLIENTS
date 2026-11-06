@@ -65,10 +65,12 @@ export async function handler(req: Request): Promise<Response> {
     return { to: m.to, ...r };
   });
 
-  let sent: string[] = [];
+  // Заполняется по мере приёма писем сервером: при ошибке на втором письме (смена адреса)
+  // первое учитывается как отправленное.
+  const sent: string[] = [];
   let error: string | null = null;
   try {
-    sent = await sendMail(smtpConfigFromEnv(), mails);
+    await sendMail(smtpConfigFromEnv(), mails, sent);
   } catch (e) {
     error = (e as Error).message;
   }

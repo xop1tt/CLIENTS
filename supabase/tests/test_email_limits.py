@@ -46,6 +46,7 @@ def test_resend_allowed_after_cooldown():
     mails(email, wait=3)
     with db() as d:  # «прошло 16 минут»
         d.execute("update private.email_sends set created_at = now() - interval '16 minutes'")
+        d.execute("update private.email_tickets set created_at = now() - interval '16 minutes'")
     assert c.gate("signup", email).status_code == 200
     time.sleep(1.1)  # стенд: GOTRUE_SMTP_MAX_FREQUENCY=1s (в облаке по умолчанию 60 с)
     r = c.http.post("/auth/v1/resend", headers={"apikey": ANON}, json={"type": "signup", "email": email})
@@ -284,3 +285,38 @@ def test_addresses_stored_only_as_hashes():
         dump = json.dumps([list(map(str, r)) for t in ("email_sends", "email_tickets", "email_requests")
                            for r in d.execute(f"select * from private.{t}").fetchall()])
     assert email not in dump and c.device not in dump and c.ip not in dump
+
+
+def test_gate_does_not_reveal_whether_account_exists():
+    """Ответы шлюза одинаковы для существующего и несуществующего адреса."""
+    set_limits(device_hourly_max=100, device_daily_max=100)
+    _, existing = confirmed_user()
+    missing = unique_email("missing")
+    answers = {}
+    for email in (existing, missing):
+        c = Client()
+        first = c.gate("recovery", email)
+        assert first.status_code == 200
+        assert recover(c, email).status_code == 200   # Auth отвечает одинаково
+        second = c.gate("recovery", email)
+        answers[email] = (second.status_code, second.json().get("reason"))
+    assert answers[existing] == answers[missing] == (429, "cooldown")
+
+
+def test_partial_smtp_failure_counts_the_delivered_mail():
+    c, email = confirmed_user()
+    new = unique_email("partial")
+    assert c.gate("email_change", email).status_code == 200
+    (MAIL_DIR / "FAIL").write_text(new)
+    try:
+        r = c.http.put("/auth/v1/user", headers=c.h(), json={"email": new})
+        assert r.status_code >= 500
+    finally:
+        (MAIL_DIR / "FAIL").unlink()
+    assert any("смену адреса" in m["subject"] for m in mails(email, wait=3))
+    with db() as d:
+        rows = dict(d.execute("select status, count(*) from private.email_sends where action = 'email_change' "
+                              "group by status").fetchall())
+        refunded = d.execute("select bool_or(refunded) from private.email_tickets where action = 'email_change'").fetchone()[0]
+    assert rows.get("sent") == 1 and rows.get("failed") == 1
+    assert refunded is False  # первое письмо ушло: талон не возвращается, повтор — через интервал

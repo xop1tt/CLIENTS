@@ -48,10 +48,13 @@ async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> 
             rcpt = []
             send("250 ok")
         elif cmd == "RCPT":
-            if (OUT / "FAIL").exists():
+            to = line.split(":", 1)[1].strip().strip("<>")
+            # FAIL с адресом внутри — ошибка только для этого получателя, иначе для всех.
+            only = (OUT / "FAIL").read_text().strip() if (OUT / "FAIL").exists() else None
+            if only is not None and (only in ("", "1") or only == to):
                 send("451 temporary failure")
             else:
-                rcpt.append(line.split(":", 1)[1].strip().strip("<>"))
+                rcpt.append(to)
                 send("250 ok")
         elif cmd == "DATA":
             send("354 go ahead")

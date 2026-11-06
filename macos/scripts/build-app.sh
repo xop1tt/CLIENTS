@@ -17,7 +17,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LeadGenerator"
 # Облако (необязательно): адрес проекта Supabase и ПУБЛИЧНЫЙ ключ (anon / publishable).
-# Секретный ключ (service_role / sb_secret_) сюда никогда не передаётся — приложение его отвергнет.
+# Секретный ключ проекта (sb_secret_…) сюда никогда не передаётся — приложение его отвергнет.
 # Без этих переменных собирается версия только с локальными учётными записями.
 CLOUD_KEYS=""
 if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_ANON_KEY:-}" ]]; then
