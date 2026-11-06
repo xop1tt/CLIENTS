@@ -108,6 +108,7 @@ public final class LeadStore {
 
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]  // стабильный JSON: иначе порядок ключей словарей меняется и каждый лид считается обновлённым
         let now = ISODate.now()
         var added = 0, updated = 0
 
