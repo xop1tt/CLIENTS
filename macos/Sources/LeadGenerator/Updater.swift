@@ -27,6 +27,8 @@ final class UpdateController {
     @ObservationIgnored private let defaults = UserDefaults.standard
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var pending: AvailableUpdate?
+    /// Последняя автоматическая попытка, в том числе неудачная (нет сети, GitHub недоступен).
+    @ObservationIgnored private var lastAttempt: Date?
 
     static let autoKey = "updates.auto"
     static let intervalKey = "updates.intervalHours"
@@ -83,6 +85,9 @@ final class UpdateController {
         guard automatic else { return }
         // Небольшой запас, чтобы проверка «раз в час» не сдвигалась на следующий тик таймера.
         if let lastCheck, Date().timeIntervalSince(lastCheck) < Double(intervalHours) * 3600 - 300 { return }
+        // После неудачи (lastCheck не обновился) повторяем не чаще раза в час, а не на каждом тике.
+        if let lastAttempt, Date().timeIntervalSince(lastAttempt) < 3600 - 300 { return }
+        lastAttempt = Date()
         check(manual: false)
     }
 
