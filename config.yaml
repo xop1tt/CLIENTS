@@ -51,7 +51,7 @@ sources:
     endpoint: https://overpass-api.de/api/interpreter
     timeout: 90
     regions:
-      - {name: Казань}
+      - {name: Ереван}
       # - {name: Москва, admin_level: 4}
     categories:
       beauty:     {label: Салоны красоты,    group: beauty,      filters: ['["shop"="beauty"]', '["shop"="hairdresser"]']}
