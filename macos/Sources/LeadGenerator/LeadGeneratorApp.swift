@@ -2,11 +2,29 @@ import AppKit
 import LeadGenCore
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var themeObserver: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Запуск из `swift run` / без .app-обёртки: показать окно и значок в Dock.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        updateDockIcon()
+        themeObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.updateDockIcon() } }
+    }
+
+    /// Значок в Dock следует теме macOS: светлый (из AppIcon.icns) или тёмный (AppIcon-Dark.png).
+    private func updateDockIcon() {
+        let systemDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
+        if systemDark, let url = Bundle.main.url(forResource: "AppIcon-Dark", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            NSApp.applicationIconImage = image
+        } else {
+            NSApp.applicationIconImage = nil  // вернуть значок из бандла
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -22,8 +40,7 @@ struct LeadGeneratorApp: App {
         WindowGroup("Lead Generator", id: "main") {
             RootView()
                 .environment(model)
-                .environment(look)
-                .modifier(LookRoot())
+                .modifier(LookRoot(look: look))
                 .frame(minWidth: 980, minHeight: 620)
                 .onAppear { look.apply() }
         }
@@ -70,8 +87,7 @@ struct LeadGeneratorApp: App {
         Settings {
             SettingsView()
                 .environment(model)
-                .environment(look)
-                .modifier(LookRoot())
+                .modifier(LookRoot(look: look))
         }
     }
 }

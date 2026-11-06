@@ -45,13 +45,14 @@ GitHub Actions (раз в час)                         Ваш Mac
 
 ## Установка
 
-### Вариант 1. Готовая сборка из GitHub Actions
+### Вариант 1. Установщик из релиза
 
-1. Откройте вкладку **Actions → macOS app**, последний успешный запуск, раздел **Artifacts** и скачайте
-   `Lead-Generator-macOS`.
-2. Распакуйте и перенесите «Lead Generator» в «Программы».
+1. Откройте [Releases](https://github.com/xop1tt/CLIENTS/releases/latest) и скачайте `Lead-Generator-vX.Y.Z-macOS.dmg`.
+2. Откройте dmg и перетащите «Lead Generator» на ярлык «Программы».
 3. Первый запуск: правый клик по приложению → **Открыть** → **Открыть**. Сборка подписана локально
    (ad-hoc), без платного Apple Developer ID, поэтому macOS спрашивает подтверждение один раз.
+
+Свежая сборка из любой ветки есть в **Actions → macOS app → Artifacts** (`Lead-Generator-macOS`, внутри dmg).
 
 ### Вариант 2. Сборка из исходников
 
@@ -61,8 +62,11 @@ GitHub Actions (раз в час)                         Ваш Mac
 cd macos
 swift test                     # тесты ядра
 ./scripts/build-app.sh         # соберёт build/Lead Generator.app
+./scripts/make-dmg.sh build/Lead-Generator.dmg   # по желанию: установщик
 open "build/Lead Generator.app"
 ```
+
+Иконка: исходники `Resources/AppIcon.svg` и `AppIcon-Dark.svg`, растры `AppIcon-1024.png` (из него при сборке получается `AppIcon.icns`) и `AppIcon-Dark-1024.png` (тёмная версия, приложение ставит её в Dock при тёмной теме macOS).
 
 Для разработки: `open Package.swift` откроет проект в Xcode, схема `LeadGenerator`.
 

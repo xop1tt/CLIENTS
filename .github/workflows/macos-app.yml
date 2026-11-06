@@ -34,12 +34,15 @@ jobs:
           UNIVERSAL: "1"
         run: ./scripts/build-app.sh build
 
-      - name: Pack
-        run: ditto -c -k --keepParent "build/Lead Generator.app" "build/Lead-Generator-macOS.zip"
+      - name: Smoke test (launch)
+        run: ./scripts/smoke-test.sh
+
+      - name: Pack installer
+        run: ./scripts/make-dmg.sh build/Lead-Generator-macOS.dmg
 
       - name: Upload app
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
           name: Lead-Generator-macOS
-          path: macos/build/Lead-Generator-macOS.zip
+          path: macos/build/Lead-Generator-macOS.dmg
           retention-days: 14

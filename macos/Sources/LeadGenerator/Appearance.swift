@@ -158,10 +158,14 @@ extension View {
 }
 
 /// Корневой модификатор окна: шрифт по умолчанию, акцент, размер контролов.
+/// Корневой модификатор окна. Получает настройки параметром, а не из окружения:
+/// модификатор стоит снаружи `.environment(look)`, и чтение `@Environment` здесь
+/// приводило к падению при запуске (значения в окружении ещё нет).
 struct LookRoot: ViewModifier {
-    @Environment(AppearanceSettings.self) private var look
+    let look: AppearanceSettings
     func body(content: Content) -> some View {
         content
+            .environment(look)
             .font(look.font(13))
             .tint(look.accent.color)
             .controlSize(look.controlSize)
