@@ -12,6 +12,8 @@ struct SettingsView: View {
             DataSettingsView().tabItem { Label("Данные", systemImage: "externaldrive") }
             ExclusionsSettingsView().tabItem { Label("Исключения", systemImage: "nosign") }
             OutreachSettingsView().tabItem { Label("Обращения", systemImage: "text.bubble") }
+            ReportSettingsView().tabItem { Label("Отчёты", systemImage: "ladybug") }
+            UpdateSettingsView().tabItem { Label("Обновления", systemImage: "arrow.down.circle") }
         }
         .frame(width: 680)
         .frame(minHeight: 520)

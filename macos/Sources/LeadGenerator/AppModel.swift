@@ -65,7 +65,9 @@ final class AppModel {
     var selectedSource: String? = SourceKey.rss
 
     var lastMessage: String?
-    var lastError: String?
+    var lastError: String? {
+        didSet { if let lastError, lastError != oldValue { ReportController.log(lastError) } }
+    }
 
     // MARK: Поиск
 
