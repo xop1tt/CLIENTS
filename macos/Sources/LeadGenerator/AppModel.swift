@@ -55,8 +55,10 @@ final class AppModel {
     var syncLog: [SyncLogEntry] = []
     var runs: [WorkflowRun] = []
 
-    var section: NavSection = .all
-    var filter = LeadFilter()
+    /// Выделение сбрасывается при смене раздела и фильтров, чтобы массовые действия
+    /// не задели лиды, которых пользователь больше не видит.
+    var section: NavSection = .all { didSet { if oldValue != section { selection = [] } } }
+    var filter = LeadFilter() { didSet { if oldValue != filter { selection = [] } } }
     var selection: Set<String> = []
     var inspectorShown = true
     var selectedSource: String?

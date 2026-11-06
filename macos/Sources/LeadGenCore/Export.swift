@@ -19,9 +19,21 @@ public enum CSV {
         return s
     }
 
+    /// Разделитель строки: считаются только `;`, `,` и табуляция вне кавычек.
+    public static func separator(for line: String) -> Character {
+        var counts: [Character: Int] = [";": 0, ",": 0, "\t": 0]
+        var quoted = false
+        for c in line {
+            if c == "\"" { quoted.toggle() } else if !quoted, counts[c] != nil { counts[c]! += 1 }
+        }
+        if counts[";"]! >= max(counts[","]!, 1) && counts[";"]! >= counts["\t"]! { return ";" }
+        if counts["\t"]! > counts[","]! { return "\t" }
+        return ","
+    }
+
     /// Разбор одной строки CSV (запятая или точка с запятой, кавычки).
     public static func parseLine(_ line: String) -> [String] {
-        let sep: Character = line.filter { $0 == ";" }.count > line.filter { $0 == "," }.count ? ";" : ","
+        let sep = separator(for: line)
         var out: [String] = [], cur = "", quoted = false
         var it = Array(line), i = 0
         while i < it.count {

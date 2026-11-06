@@ -366,12 +366,25 @@ public final class LeadStore {
         probe.close()
         guard valid else { throw SQLiteError(message: "это не резервная копия Lead Generator") }
         let current = URL(fileURLWithPath: path)
+        guard url.standardizedFileURL.resolvingSymlinksInPath() != current.standardizedFileURL.resolvingSymlinksInPath() else {
+            throw SQLiteError(message: "это текущая база, восстанавливать из неё нечего")
+        }
+        let fm = FileManager.default
+        // Сначала копируем выбранный файл рядом, и только потом убираем текущую базу.
+        let staged = current.deletingLastPathComponent().appendingPathComponent("restore-\(UUID().uuidString).db")
+        try fm.copyItem(at: url, to: staged)
+        defer { try? fm.removeItem(at: staged) }
         let safety = current.deletingLastPathComponent().appendingPathComponent("before-restore.db")
         try backup(to: safety)
         db.close()
-        let fm = FileManager.default
         for suffix in ["", "-wal", "-shm"] { try? fm.removeItem(atPath: path + suffix) }
-        try fm.copyItem(at: url, to: current)
+        do {
+            try fm.moveItem(at: staged, to: current)
+        } catch {
+            try? fm.copyItem(at: safety, to: current)
+            db = try SQLiteDB(path: current.path)
+            throw error
+        }
         db = try SQLiteDB(path: current.path)
         try db.exec("PRAGMA journal_mode=WAL")
         try db.exec(Self.schema)

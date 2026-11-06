@@ -126,6 +126,10 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(try store.allLeads().isEmpty)
         try store.restore(from: backup)
         XCTAssertEqual(try store.allLeads().count, 2)
+
+        let current = dir.appendingPathComponent("local.db")
+        XCTAssertThrowsError(try store.restore(from: current), "восстановление из самой себя запрещено")
+        XCTAssertEqual(try store.allLeads().count, 2, "база осталась на месте и открыта")
     }
 
     func testExportCSVAndDraft() throws {
@@ -157,6 +161,8 @@ final class StoreTests: XCTestCase {
     func testCSVParse() {
         XCTAssertEqual(CSV.parseLine("a,\"b, c\",\"d \"\"e\"\"\""), ["a", "b, c", "d \"e\""])
         XCTAssertEqual(CSV.parseLine("x;y;z"), ["x", "y", "z"])
+        XCTAssertEqual(CSV.parseLine("\"ООО Ромашка, Казань, РФ\";info@r.ru;+7 900 1112233"),
+                       ["ООО Ромашка, Казань, РФ", "info@r.ru", "+7 900 1112233"], "запятые в кавычках не меняют разделитель")
     }
 
     func testNormalize() {
