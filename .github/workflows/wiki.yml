@@ -1,0 +1,45 @@
+name: Wiki
+
+# Публикует страницы из папки wiki/ в Wiki репозитория (github.com/xop1tt/CLIENTS/wiki).
+# Страницы правятся через PR в main, как и код; после слияния Wiki обновляется сама.
+# Правки прямо в веб-интерфейсе Wiki будут перезаписаны при следующей публикации.
+on:
+  push:
+    branches: [main]
+    paths: ["wiki/**", ".github/workflows/wiki.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # только для пуша в репозиторий Wiki
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Publish
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/${REPO}.wiki.git" "$RUNNER_TEMP/wiki"
+          find "$RUNNER_TEMP/wiki" -mindepth 1 -maxdepth 1 -name '*.md' -delete
+          cp wiki/*.md "$RUNNER_TEMP/wiki/"
+          cd "$RUNNER_TEMP/wiki"
+          git add -A
+          if git diff --cached --quiet; then echo "Wiki уже актуальна"; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Wiki из ${SHA}"
+          git push origin HEAD

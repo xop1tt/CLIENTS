@@ -1,0 +1,15 @@
+# Настройки для Supabase CLI (npx supabase …): только то, что нужно для развёртывания функций
+# в ВАШ отдельный проект Lead Generator. Ключей и секретов здесь нет и быть не должно.
+project_id = "lead-generator"
+
+# Функции сами проверяют, кто их вызывает: send-email — подпись хука Auth (Standard Webhooks),
+# email-gate — публичная, только выдаёт разрешение по лимитам, delete-account — токен
+# пользователя через /auth/v1/user и недавний вход по паролю.
+[functions.send-email]
+verify_jwt = false
+
+[functions.email-gate]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false

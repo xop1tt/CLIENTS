@@ -4,8 +4,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct LeadsView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.appModel) private var model
+    @Environment(\.look) private var look
     @State private var sortOrder: [KeyPathComparator<LeadItem>] = [KeyPathComparator(\LeadItem.score, order: .reverse)]
     @State private var exportShown = false
 
@@ -30,8 +30,8 @@ struct LeadsView: View {
         .navigationSubtitle("\(items.count)")
         .sheet(isPresented: $exportShown) {
             ExportSheet(items: model.selection.isEmpty ? items : items.filter { model.selection.contains($0.id) })
-                .environment(model)
-                .environment(look)
+                .environment(\.appModel, model)
+                .environment(\.look, look)
         }
         .onChange(of: model.selection) { _, ids in
             // Открытый лид считается просмотренным.
@@ -43,7 +43,9 @@ struct LeadsView: View {
 
     private var table: some View {
         @Bindable var model = model
-        return Table(items, selection: $model.selection, sortOrder: $sortOrder) {
+        return Table(items, selection: Binding(get: { model.selection },
+                                               set: { if $0 != model.selection { model.selection = $0 } }),
+                     sortOrder: $sortOrder) {
             TableColumn("") { (l: LeadItem) in
                 Button { model.toggleFavorite([l.id]) } label: {
                     Image(systemName: l.favorite ? "star.fill" : "star")
@@ -270,7 +272,7 @@ struct LeadsView: View {
 // MARK: - Экспорт
 
 struct ExportSheet: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @Environment(\.dismiss) private var dismiss
     let items: [LeadItem]
     @State private var format: ExportFormat = .csv

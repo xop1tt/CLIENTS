@@ -3,8 +3,8 @@ import LeadGenCore
 import SwiftUI
 
 struct LeadInspector: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.appModel) private var model
+    @Environment(\.look) private var look
     let lead: LeadItem
 
     @State private var tab = 0

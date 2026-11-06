@@ -3,8 +3,8 @@ import LeadGenCore
 import SwiftUI
 
 struct DashboardView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.appModel) private var model
+    @Environment(\.look) private var look
 
     private var active: [LeadItem] { model.leads.filter { !$0.excluded && $0.data.relevance != .rejected } }
     private var newLeads: [LeadItem] { active.filter { !$0.seen && !$0.archived } }

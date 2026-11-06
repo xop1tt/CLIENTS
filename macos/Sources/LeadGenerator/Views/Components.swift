@@ -16,7 +16,7 @@ enum Palette {
 
 /// Оценка: число + полоска.
 struct ScoreView: View {
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.look) private var look
     let score: Double
     var body: some View {
         HStack(spacing: 6 * look.scale) {
@@ -36,7 +36,7 @@ struct ScoreView: View {
 
 /// Буквенный значок источника (без чужих логотипов).
 struct SourceBadge: View {
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.look) private var look
     let source: String
     var showTitle = true
     var body: some View {

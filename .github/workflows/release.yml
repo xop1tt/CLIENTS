@@ -39,6 +39,10 @@ jobs:
         working-directory: macos
         env:
           UNIVERSAL: "1"
+          # Облако: адрес проекта и ПУБЛИЧНЫЙ ключ из переменных репозитория (не секретов).
+          # Не заданы — собирается версия только с локальными учётными записями.
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           export LEADGEN_VERSION="${TAG#v}"

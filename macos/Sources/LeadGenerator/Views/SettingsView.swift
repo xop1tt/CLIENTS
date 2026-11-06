@@ -12,6 +12,8 @@ struct SettingsView: View {
             DataSettingsView().tabItem { Label("Данные", systemImage: "externaldrive") }
             ExclusionsSettingsView().tabItem { Label("Исключения", systemImage: "nosign") }
             OutreachSettingsView().tabItem { Label("Обращения", systemImage: "text.bubble") }
+            ReportSettingsView().tabItem { Label("Отчёты", systemImage: "ladybug") }
+            UpdateSettingsView().tabItem { Label("Обновления", systemImage: "arrow.down.circle") }
         }
         .frame(width: 680)
         .frame(minHeight: 520)
@@ -21,7 +23,7 @@ struct SettingsView: View {
 // MARK: - Внешний вид
 
 struct AppearanceSettingsView: View {
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.look) private var look
     @State private var allFonts: [String] = []
 
     var body: some View {
@@ -133,7 +135,7 @@ private struct ThemeTile: View {
 }
 
 private struct PreviewRow: View {
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.look) private var look
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "star.fill").foregroundStyle(.yellow)
@@ -155,7 +157,7 @@ private struct PreviewRow: View {
 // MARK: - Поиск
 
 struct SearchSettingsView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @AppStorage(BackgroundMode.key) private var keepRunning = true
 
     var body: some View {
@@ -199,8 +201,8 @@ struct SearchSettingsView: View {
 // MARK: - Учётная запись
 
 struct AccountSettingsView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(SessionModel.self) private var session
+    @Environment(\.appModel) private var model
+    @Environment(\.session) private var session
     @State private var old = ""
     @State private var new = ""
     @State private var again = ""
@@ -208,6 +210,10 @@ struct AccountSettingsView: View {
     @State private var ok = false
 
     var body: some View {
+        if model.isCloud { CloudAccountSettingsView() } else { localForm }
+    }
+
+    private var localForm: some View {
         Form {
             Section("Пользователь") {
                 LabeledContent("Имя пользователя", value: model.username)
@@ -254,7 +260,7 @@ struct AccountSettingsView: View {
 // MARK: - Данные
 
 struct DataSettingsView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @State private var backups: [URL] = []
 
     var body: some View {
@@ -326,7 +332,7 @@ struct DataSettingsView: View {
 // MARK: - Исключения
 
 struct ExclusionsSettingsView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @State private var kind: ExclusionKind = .domain
     @State private var value = ""
 
@@ -380,7 +386,7 @@ struct ExclusionsSettingsView: View {
 // MARK: - Обращения
 
 struct OutreachSettingsView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         @Bindable var model = model

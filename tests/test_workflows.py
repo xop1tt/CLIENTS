@@ -59,9 +59,17 @@ def test_automerge_only_for_dependabot_patch_minor_without_checkout():
 
 
 def test_elevated_permissions_only_in_expected_jobs():
-    allowed = {"release.yml": {"release"}, "dependabot-automerge.yml": {"automerge"}}
+    allowed = {"release.yml": {"release"}, "dependabot-automerge.yml": {"automerge"}, "wiki.yml": {"publish"}}
     for f in WF.glob("*.yml"):
         wf = yaml.safe_load(f.read_text(encoding="utf-8"))
         for name, job in wf["jobs"].items():
             if "permissions" in job:
                 assert name in allowed.get(f.name, set()), f"{f.name}:{name} повышает права"
+
+
+def test_wiki_publishes_only_from_main():
+    wf = load("wiki.yml")
+    on = wf[True]
+    assert set(on) == {"push", "workflow_dispatch"}
+    assert on["push"]["branches"] == ["main"]
+    assert wf["jobs"]["publish"]["permissions"] == {"contents": "write"}

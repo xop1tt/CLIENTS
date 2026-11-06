@@ -1,4 +1,5 @@
 import AppKit
+import LeadCloud
 import LeadGenCore
 import LeadSearch
 import SwiftUI
@@ -46,7 +47,15 @@ struct LeadFilter: Equatable {
 @MainActor
 @Observable
 final class AppModel {
+    /// Внутренний идентификатор учётной записи (имя локальной записи или cloud-<uuid>).
     let username: String
+    /// Что показывать в интерфейсе: имя пользователя или адрес почты.
+    let displayName: String
+    /// Облачная учётная запись: изменения записываются в журнал и синхронизируются.
+    let isCloud: Bool
+    /// Вызывается после каждого изменения данных — облачная синхронизация отправит их.
+    var onLocalChange: (() -> Void)?
+    private var applyingRemote = false
     private(set) var store: LeadStore?
     var startupError: String?
 
@@ -65,13 +74,19 @@ final class AppModel {
     var selectedSource: String? = SourceKey.rss
 
     var lastMessage: String?
-    var lastError: String?
+    var lastError: String? {
+        didSet { if let lastError, lastError != oldValue { ReportController.log(lastError) } }
+    }
 
     // MARK: Поиск
 
     /// Настройки источников и ключевых слов. Хранятся в базе пользователя.
     var searchSettings = SearchSettings() {
-        didSet { if oldValue != searchSettings { try? store?.setValue("search.settings", searchSettings.encoded()) } }
+        didSet {
+            guard oldValue != searchSettings, !applyingRemote else { return }
+            try? store?.setSyncedValue("search.settings", searchSettings.encoded())
+            onLocalChange?()
+        }
     }
     private(set) var searching = false
     private(set) var searchProgress: String?
@@ -84,25 +99,54 @@ final class AppModel {
     private let defaults = UserDefaults.standard
     private func key(_ k: String) -> String { "\(k).\(username.lowercased())" }
 
-    var autoSearchMinutes: Int { didSet { defaults.set(autoSearchMinutes, forKey: key("search.auto")); scheduleAutoSearch() } }
-    var signature: String { didSet { defaults.set(signature, forKey: key("draft.signature")) } }
+    var autoSearchMinutes: Int {
+        didSet {
+            defaults.set(autoSearchMinutes, forKey: key("search.auto"))
+            scheduleAutoSearch()
+            if !applyingRemote, oldValue != autoSearchMinutes {
+                try? store?.setSyncedValue("search.auto", String(autoSearchMinutes))
+                onLocalChange?()
+            }
+        }
+    }
+    var signature: String {
+        didSet {
+            defaults.set(signature, forKey: key("draft.signature"))
+            if !applyingRemote, oldValue != signature {
+                try? store?.setSyncedValue("draft.signature", JSONValue.string(signature).text)
+                onLocalChange?()
+            }
+        }
+    }
     var backupDirectory: String { didSet { defaults.set(backupDirectory, forKey: key("data.backupDir")) } }
     var autoBackup: Bool { didSet { defaults.set(autoBackup, forKey: key("data.autoBackup")) } }
     var keepBackups: Int { didSet { defaults.set(keepBackups, forKey: key("data.keepBackups")) } }
 
     /// Сервисный ключ VK — в Связке ключей, отдельно для каждого пользователя.
+    /// Читается из Связки ключей один раз при входе: представления обращаются к ключу при каждой перерисовке.
     var vkToken: String {
-        get { Keychain.get(key("vk.token")) ?? "" }
-        set { Keychain.set(key("vk.token"), newValue.trimmingCharacters(in: .whitespacesAndNewlines)); vkTokenRevision += 1 }
+        get { vkTokenValue }
+        set {
+            let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            Keychain.set(key("vk.token"), value)
+            vkTokenValue = value
+        }
     }
-    private(set) var vkTokenRevision = 0
-    var hasVKToken: Bool { _ = vkTokenRevision; return !vkToken.isEmpty }
+    private var vkTokenValue = ""
+    var hasVKToken: Bool { !vkTokenValue.isEmpty }
 
     let defaultDatabasePath: String
     var databasePath: String { store?.path ?? (defaults.string(forKey: key("data.path")) ?? defaultDatabasePath) }
 
-    init(username: String, dataDirectory: URL) {
+    /// Пустая модель на случай, если представление отрисовалось без модели в окружении
+    /// (например, в отдельно размещённом окне или в момент выхода). Без базы и таймеров.
+    static let placeholder = AppModel(username: "—", dataDirectory: FileManager.default.temporaryDirectory
+        .appendingPathComponent("LeadGenerator-placeholder", isDirectory: true), inert: true)
+
+    init(username: String, displayName: String? = nil, isCloud: Bool = false, dataDirectory: URL, inert: Bool = false) {
         self.username = username
+        self.displayName = displayName ?? username
+        self.isCloud = isCloud
         defaultDatabasePath = dataDirectory.appendingPathComponent("leads.db").path
         let interval = defaults.object(forKey: "search.auto.\(username.lowercased())") as? Int
         autoSearchMinutes = interval ?? 60
@@ -113,11 +157,17 @@ final class AppModel {
         autoBackup = defaults.object(forKey: "data.autoBackup.\(username.lowercased())") as? Bool ?? true
         let keep = defaults.integer(forKey: "data.keepBackups.\(username.lowercased())")
         keepBackups = keep == 0 ? 14 : keep
+        vkTokenValue = inert ? "" : Keychain.get("vk.token.\(username.lowercased())") ?? ""
+        guard !inert else { return }
 
         do {
             let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath)
+            if isCloud && !store.syncTracking { try store.enableSyncTracking() }
             self.store = store
+            applyingRemote = true
             searchSettings = SearchSettings.decode(store.value("search.settings"))
+            applyingRemote = false
+            reloadSyncedSettings()
             reload()
             dailyBackupIfNeeded()
             // Приложение может работать в фоне днями: проверяем суточную копию каждый час,
@@ -129,6 +179,17 @@ final class AppModel {
             startupError = "Не удалось открыть базу: \(error.localizedDescription)"
         }
         scheduleAutoSearch()
+    }
+
+    /// Настройки, пришедшие из облака (или сохранённые в базе), — в модель, без повторной выгрузки.
+    func reloadSyncedSettings() {
+        guard let store else { return }
+        applyingRemote = true
+        defer { applyingRemote = false }
+        let s = SearchSettings.decode(store.value("search.settings"))
+        if s != searchSettings { searchSettings = s }
+        if let v = store.value("draft.signature").flatMap(JSONValue.parse)?.stringValue, v != signature { signature = v }
+        if let v = store.value("search.auto").flatMap({ Int($0) }), v != autoSearchMinutes { autoSearchMinutes = v }
     }
 
     /// Выход из учётной записи: остановить поиск и таймеры.
@@ -152,7 +213,12 @@ final class AppModel {
             pipelineErrors = try store.pipelineErrors()
             exclusions = try store.exclusions()
             syncLog = try store.syncLog()
-            selection = selection.intersection(Set(leads.map(\.id)))
+            let last = ISODate.parse(store.value("last_search_at"))
+            if last != lastSearchAt { lastSearchAt = last }
+            // Присваиваем только при изменении: любое присваивание заставляет перестраивать
+            // главное меню и таблицу, даже если значение то же самое.
+            let kept = selection.intersection(Set(leads.map(\.id)))
+            if kept != selection { selection = kept }
         } catch { lastError = error.localizedDescription }
     }
 
@@ -199,7 +265,7 @@ final class AppModel {
 
     private func act(_ body: (LeadStore) throws -> Void) {
         guard let store else { return }
-        do { try body(store); reload() } catch { lastError = error.localizedDescription }
+        do { try body(store); reload(); onLocalChange?() } catch { lastError = error.localizedDescription }
     }
 
     func toggleFavorite(_ ids: Set<String>) {
@@ -234,7 +300,9 @@ final class AppModel {
 
     // MARK: Поиск лидов на этом Mac
 
-    var lastSearchAt: Date? { ISODate.parse(store?.value("last_search_at")) }
+    /// Время последнего поиска. Хранится в памяти и обновляется в `reload()`,
+    /// чтобы не читать базу и не разбирать дату при каждой перерисовке.
+    private(set) var lastSearchAt: Date?
 
     func problem(_ source: String) -> String? {
         SearchEngine.problem(source, searchSettings, SearchSecrets(vkToken: vkToken))
@@ -271,6 +339,7 @@ final class AppModel {
             self.searchTask = nil
             self.lastReport = report
             self.reload()
+            if report.added > 0 || report.updated > 0 { self.onLocalChange?() }
             // При работе в фоне приложение может не перезапускаться днями: копия раз в сутки и после поиска.
             self.dailyBackupIfNeeded()
             if !quiet || report.added > 0 || !report.failed.isEmpty {
@@ -347,6 +416,8 @@ final class AppModel {
         do {
             try store.restore(from: url)
             reload()
+            reloadSyncedSettings()
+            onLocalChange?()
             lastMessage = "База восстановлена из копии. Предыдущая версия сохранена как before-restore.db"
         } catch { lastError = "Восстановление не удалось: \(error.localizedDescription)" }
     }
