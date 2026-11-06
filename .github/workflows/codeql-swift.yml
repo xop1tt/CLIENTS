@@ -1,0 +1,49 @@
+name: CodeQL (Swift)
+
+# Анализ Swift требует полной сборки приложения на macOS под трассировкой CodeQL (~15 минут),
+# поэтому он не запускается в PR и не задерживает слияние. Проверяется:
+#   - каждое слияние в main, затрагивающее macos/ (результат — во вкладке Security);
+#   - раз в неделю по расписанию;
+#   - вручную (Actions → CodeQL (Swift) → Run workflow), например перед релизом.
+# Быстрые языки (Actions, Python, TypeScript) идут в каждом PR — см. codeql.yml.
+on:
+  push:
+    branches: [main]
+    paths: ["macos/**", ".github/workflows/codeql-swift.yml"]
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Не отменяем запуск на main (иначе в списке появляются красные «cancelled»), а ставим в очередь.
+concurrency:
+  group: codeql-swift-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    name: Analyze (swift)
+    runs-on: macos-15
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: swift
+          build-mode: manual
+      # Собираем только приложение (с ним — все библиотеки), без тестовых таргетов.
+      # Кэш .build здесь не подключаем: CodeQL видит только то, что реально компилируется.
+      - name: Build app (debug, no tests)
+        working-directory: macos
+        run: swift build --product LeadGenerator
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          category: "/language:swift"
