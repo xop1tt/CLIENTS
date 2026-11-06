@@ -1,3 +1,6 @@
+// Только Apple-платформы (CommonCrypto, Связка ключей). Остальное ядро собирается и на Linux,
+// где на тестовом стенде проверяется облачная синхронизация.
+#if canImport(Security)
 import CommonCrypto
 import Foundation
 import Security
@@ -172,3 +175,4 @@ public final class LocalAuthService: AuthService {
         return diff == 0
     }
 }
+#endif

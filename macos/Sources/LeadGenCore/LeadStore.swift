@@ -6,6 +6,8 @@ import Foundation
 public final class LeadStore: @unchecked Sendable {
     public private(set) var db: SQLiteDB
     public var path: String { db.path }
+    /// Записывать изменения в журнал синхронизации (включено для облачных учётных записей).
+    public internal(set) var syncTracking = false
 
     static let schema = """
     CREATE TABLE IF NOT EXISTS leads (
@@ -75,6 +77,14 @@ public final class LeadStore: @unchecked Sendable {
         try db.exec(Self.schema)
         try db.run("INSERT OR IGNORE INTO kv(key, value) VALUES('schema_version', '1')")
         try migrate()
+        syncTracking = value("sync.enabled") == "1"
+    }
+
+    /// Включить журнал изменений для облака. Флаг хранится в самой базе, поэтому его видят
+    /// все соединения (поиск работает через своё).
+    public func enableSyncTracking() throws {
+        try setValue("sync.enabled", "1")
+        syncTracking = true
     }
 
     /// Миграции схемы старых баз (версия 1.0.x хранила результаты поиска из GitHub Actions).
@@ -97,12 +107,13 @@ public final class LeadStore: @unchecked Sendable {
         );
         CREATE INDEX IF NOT EXISTS ix_leads_fingerprint ON leads(fingerprint);
         """)
+        try db.exec(Self.syncSchema)
         try db.run("INSERT INTO kv(key, value) VALUES('schema_version', '2') ON CONFLICT(key) DO UPDATE SET value='2'")
     }
 
     // MARK: - Результаты поиска
 
-    private static let encoder: JSONEncoder = {
+    static let encoder: JSONEncoder = {
         let e = JSONEncoder()
         e.outputFormatting = [.sortedKeys]  // стабильный JSON: иначе каждый лид считался бы изменённым
         return e
@@ -124,6 +135,7 @@ public final class LeadStore: @unchecked Sendable {
                 WHERE lead_id=?
                 """, [.text(fingerprint), .text(data.kind.rawValue), .text(data.source), .text(data.title),
                       .double(data.score), .text(data.relevance.rawValue), .text(now), .text(json), .text(id)])
+            try markDirty("lead", id, ["data"])
             return .updated
         }
         if !fingerprint.isEmpty,
@@ -138,6 +150,7 @@ public final class LeadStore: @unchecked Sendable {
                   .double(data.score), .text(data.relevance.rawValue), .of(ISODate.format(data.discoveredAt) ?? now),
                   .text(now), .text(json), .text(now)])
         try logEvent(id, "Найден поиском (\(SourceCatalog.title(data.source)))")
+        try markDirty("lead", id, ["data"])
         return .added
     }
 
@@ -289,11 +302,11 @@ public final class LeadStore: @unchecked Sendable {
 
     // MARK: - Действия пользователя
 
-    private func update(_ ids: [String], _ sql: String, _ args: [SQLValue], event: String?) throws {
+    private func update(_ ids: [String], _ sql: String, _ args: [SQLValue], event: String?, field: String) throws {
         guard !ids.isEmpty else { return }
         try db.transaction {
             for id in ids {
-                try db.run(sql, args + [.text(id)])
+                if try db.run(sql, args + [.text(id)]) > 0 { try markDirty("lead", id, [field]) }
                 if let event { try logEvent(id, event) }
             }
         }
@@ -301,27 +314,34 @@ public final class LeadStore: @unchecked Sendable {
 
     public func setFavorite(_ ids: [String], _ on: Bool) throws {
         try update(ids, "UPDATE leads SET favorite=? WHERE lead_id=?", [.of(on)],
-                   event: on ? "Добавлен в избранное" : "Убран из избранного")
+                   event: on ? "Добавлен в избранное" : "Убран из избранного", field: "favorite")
     }
 
     public func setArchived(_ ids: [String], _ on: Bool) throws {
         try update(ids, "UPDATE leads SET archived=? WHERE lead_id=?", [.of(on)],
-                   event: on ? "Перенесён в архив" : "Возвращён из архива")
+                   event: on ? "Перенесён в архив" : "Возвращён из архива", field: "archived")
     }
 
     /// Удалённые лиды остаются в базе скрытыми, чтобы следующий поиск не вернул их.
     public func delete(_ ids: [String]) throws {
-        try update(ids, "UPDATE leads SET deleted=1 WHERE lead_id=?", [], event: "Удалён")
+        try update(ids, "UPDATE leads SET deleted=1 WHERE lead_id=?", [], event: "Удалён", field: "deleted")
     }
 
     public func markSeen(_ ids: [String]) throws {
-        try update(ids, "UPDATE leads SET seen=1 WHERE lead_id=? AND seen=0", [], event: nil)
+        try update(ids, "UPDATE leads SET seen=1 WHERE lead_id=? AND seen=0", [], event: nil, field: "seen")
     }
 
-    public func markAllSeen() throws { try db.run("UPDATE leads SET seen=1 WHERE seen=0") }
+    public func markAllSeen() throws {
+        let ids = try db.query("SELECT lead_id FROM leads WHERE seen=0").compactMap { $0["lead_id"]?.string }
+        try update(ids, "UPDATE leads SET seen=1 WHERE lead_id=? AND seen=0", [], event: nil, field: "seen")
+    }
 
     public func setNote(_ id: String, _ note: String) throws {
-        try db.run("UPDATE leads SET note=? WHERE lead_id=?", [.text(note), .text(id)])
+        try db.transaction {
+            if try db.run("UPDATE leads SET note=? WHERE lead_id=? AND note<>?", [.text(note), .text(id), .text(note)]) > 0 {
+                try markDirty("lead", id, ["note"])
+            }
+        }
     }
 
     public func logEvent(_ id: String, _ action: String) throws {
@@ -338,12 +358,18 @@ public final class LeadStore: @unchecked Sendable {
     public func addExclusion(_ kind: ExclusionKind, _ raw: String) throws {
         let value = Normalize.value(raw, kind: kind)
         guard !value.isEmpty else { return }
-        try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",
-                   [.text(kind.rawValue), .text(value), .text(ISODate.now())])
+        if try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",
+                      [.text(kind.rawValue), .text(value), .text(ISODate.now())]) > 0 {
+            try markDirty("exclusion", "\(kind.rawValue)|\(value)", ["deleted"])
+        }
         try applyExclusions()
     }
 
     public func removeExclusion(_ id: Int64) throws {
+        if let r = try db.query("SELECT kind, value FROM exclusions WHERE id=?", [.int(id)]).first,
+           let k = r["kind"]?.string, let v = r["value"]?.string {
+            try markDirty("exclusion", "\(k)|\(v)", ["deleted"])
+        }
         try db.run("DELETE FROM exclusions WHERE id=?", [.int(id)])
         try applyExclusions()
     }
@@ -395,8 +421,11 @@ public final class LeadStore: @unchecked Sendable {
                 else if v.contains(".") && !v.contains(" ") { kind = .domain }
                 else { kind = nil }
                 if let kind {
-                    count += try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",
-                                        [.text(kind.rawValue), .text(Normalize.value(v, kind: kind)), .text(ISODate.now())])
+                    let norm = Normalize.value(v, kind: kind)
+                    let added = try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",
+                                           [.text(kind.rawValue), .text(norm), .text(ISODate.now())])
+                    if added > 0 { try markDirty("exclusion", "\(kind.rawValue)|\(norm)", ["deleted"]) }
+                    count += added
                 }
             }
         }
@@ -442,6 +471,13 @@ public final class LeadStore: @unchecked Sendable {
         try db.exec("PRAGMA journal_mode=WAL")
         try db.exec(Self.schema)
         try migrate()
+        // Восстановленная копия — осознанный выбор пользователя: её состояние уходит в облако
+        // как новое изменение, а всё, что появилось в облаке позже, загрузится заново.
+        if syncTracking {
+            try setValue("sync.enabled", "1")
+            try markEverythingDirty(at: Date())
+            try resetSyncCursors()
+        }
     }
 
     /// Переносит базу в другую папку.

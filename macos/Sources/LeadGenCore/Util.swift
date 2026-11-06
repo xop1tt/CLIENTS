@@ -34,6 +34,9 @@ public enum ISODate {
     }
 
     public static func now() -> String { plain.string(from: Date()) }
+
+    /// С миллисекундами — для журнала синхронизации.
+    public static func formatPrecise(_ d: Date) -> String { fractional.string(from: d) }
 }
 
 /// Нормализация значений для исключений и сравнения.
