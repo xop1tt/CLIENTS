@@ -145,6 +145,15 @@ final class StoreTests: XCTestCase {
         XCTAssertTrue(draft.hasPrefix("Тема:"))
     }
 
+    func testCSVFormulaNeutralized() {
+        XCTAssertEqual(CSV.escape("=HYPERLINK(\"http://x\")"), "\"'=HYPERLINK(\"\"http://x\"\")\"")
+        XCTAssertEqual(CSV.escape("@SUM(A1)"), "'@SUM(A1)")
+        XCTAssertEqual(CSV.escape("-1+2"), "-1+2")
+        XCTAssertEqual(CSV.escape("-cmd|x"), "'-cmd|x")
+        XCTAssertEqual(CSV.escape("+7 (843) 212-48-90"), "+7 (843) 212-48-90")
+        XCTAssertEqual(CSV.escape("Студия"), "Студия")
+    }
+
     func testCSVParse() {
         XCTAssertEqual(CSV.parseLine("a,\"b, c\",\"d \"\"e\"\"\""), ["a", "b, c", "d \"e\""])
         XCTAssertEqual(CSV.parseLine("x;y;z"), ["x", "y", "z"])

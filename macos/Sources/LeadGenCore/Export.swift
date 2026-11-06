@@ -1,7 +1,18 @@
 import Foundation
 
 public enum CSV {
-    public static func escape(_ s: String) -> String {
+    /// Ячейки, которые Excel и Numbers считают формулами. Текст из внешних источников
+    /// (fl.ru, Telegram, VK, OSM) может начинаться с «=HYPERLINK(...)», поэтому такие значения
+    /// экранируются апострофом. Номер телефона вида «+7 (843) 212-48-90» формулой быть не может и не меняется.
+    static func neutralizeFormula(_ s: String) -> String {
+        guard let first = s.first, "=+-@\t\r".contains(first) else { return s }
+        let phoneChars = Set("0123456789+-() ")
+        if s.allSatisfy({ phoneChars.contains($0) }) && s.contains(where: \.isNumber) { return s }
+        return "'" + s
+    }
+
+    public static func escape(_ raw: String) -> String {
+        let s = neutralizeFormula(raw)
         if s.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" || $0 == "\r" || $0 == ";" }) {
             return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
         }
