@@ -33,13 +33,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct LeadGeneratorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @State private var model = AppModel()
+    @State private var session = SessionModel()
     @State private var look = AppearanceSettings()
 
     var body: some Scene {
         WindowGroup("Lead Generator", id: "main") {
-            RootView()
-                .environment(model)
+            SessionRoot()
+                .environment(session)
                 .modifier(LookRoot(look: look))
                 .frame(minWidth: 980, minHeight: 620)
                 .onAppear { look.apply() }
@@ -48,18 +48,24 @@ struct LeadGeneratorApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandMenu("Лиды") {
-                Button("Синхронизировать") { Task { await model.syncNow() } }
-                    .keyboardShortcut("r", modifiers: .command)
-                Button("Запустить поиск в GitHub Actions") { Task { await model.dispatchSearch() } }
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                Button(session.current?.searching == true ? "Остановить поиск" : "Найти лиды") {
+                    guard let model = session.current else { return }
+                    if model.searching { model.stopSearch() } else { model.runSearch() }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                .disabled(session.current == nil)
                 Divider()
-                Button("Отметить все как просмотренные") { model.markAllSeen() }
-                Button("В избранное") { model.toggleFavorite(model.selection) }
+                Button("Отметить все как просмотренные") { session.current?.markAllSeen() }
+                    .disabled(session.current == nil)
+                Button("В избранное") { if let m = session.current { m.toggleFavorite(m.selection) } }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
-                    .disabled(model.selection.isEmpty)
-                Button("В архив") { model.setArchived(model.selection, true) }
+                    .disabled(session.current?.selection.isEmpty ?? true)
+                Button("В архив") { if let m = session.current { m.setArchived(m.selection, true) } }
                     .keyboardShortcut("e", modifiers: .command)
-                    .disabled(model.selection.isEmpty)
+                    .disabled(session.current?.selection.isEmpty ?? true)
+                Divider()
+                Button("Выйти из учётной записи") { session.logout() }
+                    .disabled(session.current == nil)
             }
             CommandGroup(after: .toolbar) {
                 Divider()
@@ -77,17 +83,47 @@ struct LeadGeneratorApp: App {
                 }
             }
             CommandGroup(after: .sidebar) {
-                Button(model.inspectorShown ? "Скрыть правую панель" : "Показать правую панель") {
-                    model.inspectorShown.toggle()
+                Button(session.current?.inspectorShown == false ? "Показать правую панель" : "Скрыть правую панель") {
+                    session.current?.inspectorShown.toggle()
                 }
                 .keyboardShortcut("i", modifiers: [.command, .option])
+                .disabled(session.current == nil)
             }
         }
 
         Settings {
-            SettingsView()
-                .environment(model)
+            SettingsRoot()
+                .environment(session)
                 .modifier(LookRoot(look: look))
+        }
+    }
+}
+
+/// Окно приложения: вход или рабочее пространство пользователя.
+struct SessionRoot: View {
+    @Environment(SessionModel.self) private var session
+
+    var body: some View {
+        if let model = session.current {
+            RootView()
+                .environment(model)
+                .id(model.username)
+        } else {
+            AuthView()
+        }
+    }
+}
+
+struct SettingsRoot: View {
+    @Environment(SessionModel.self) private var session
+
+    var body: some View {
+        if let model = session.current {
+            SettingsView().environment(model)
+        } else {
+            ContentUnavailableView("Войдите в учётную запись", systemImage: "person.crop.circle",
+                                   description: Text("Настройки поиска и данных у каждого пользователя свои."))
+                .frame(width: 480, height: 300)
         }
     }
 }

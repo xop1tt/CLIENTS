@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-/// Секреты (токен GitHub, ключ шифрования состояния) хранятся только в Связке ключей macOS.
+/// Секреты (ключ VK, запомненный вход) хранятся только в Связке ключей macOS.
 public enum Keychain {
     static let service = "LeadGenerator"
 

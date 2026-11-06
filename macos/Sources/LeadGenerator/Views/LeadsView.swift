@@ -27,8 +27,6 @@ struct LeadsView: View {
         }
         .navigationTitle(model.section.title)
         .navigationSubtitle("\(items.count)")
-        .searchable(text: $model.filter.search, placement: .toolbar, prompt: "Поиск по названию, контактам, тексту")
-        .toolbar { toolbarItems }
         .sheet(isPresented: $exportShown) {
             ExportSheet(items: model.selection.isEmpty ? items : items.filter { model.selection.contains($0.id) })
         }
@@ -161,6 +159,18 @@ struct LeadsView: View {
     private var filterBar: some View {
         @Bindable var model = model
         return HStack(spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField("Поиск по названию, контактам, тексту", text: $model.filter.search)
+                    .textFieldStyle(.plain)
+                if !model.filter.search.isEmpty {
+                    Button { model.filter.search = "" } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain).foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(width: 260 * look.scale, height: 24 * look.scale)
+            .background(RoundedRectangle(cornerRadius: 6).fill(.quaternary.opacity(0.6)))
             Picker("Тип", selection: $model.filter.kind) {
                 Text("Все типы").tag(LeadKind?.none)
                 ForEach(LeadKind.allCases, id: \.self) { Text($0.title).tag(LeadKind?.some($0)) }
@@ -193,6 +203,9 @@ struct LeadsView: View {
                 Button("Сбросить") { model.filter = LeadFilter(search: model.filter.search) }
                     .buttonStyle(.link)
             }
+            Button { exportShown = true } label: { Label("Экспорт", systemImage: "square.and.arrow.up") }
+                .labelStyle(.titleAndIcon)
+                .help("Экспорт выбранных или всех показанных лидов")
         }
         .labelsHidden()
         .appFont(12)
@@ -225,7 +238,7 @@ struct LeadsView: View {
             Label("Все данные хранятся на этом Mac", systemImage: "lock.shield")
             Text(model.databasePath.replacingOccurrences(of: NSHomeDirectory(), with: "~")).lineLimit(1).truncationMode(.middle)
             Spacer()
-            if let at = model.lastStateAt { Text("Последний поиск в Actions: \(at.shortRelative)") }
+            if let at = model.lastSearchAt { Text("Последний поиск: \(at.shortRelative)") }
         }
         .appFont(11)
         .foregroundStyle(.secondary)
@@ -238,34 +251,13 @@ struct LeadsView: View {
             ContentUnavailableView {
                 Label("Лидов пока нет", systemImage: "tray")
             } description: {
-                Text(model.syncConfigured
-                     ? "Нажмите «Синхронизировать», чтобы забрать результаты поиска из GitHub Actions."
-                     : "Поиск выполняется в GitHub Actions. Укажите в настройках токен GitHub и ключ шифрования состояния, чтобы получать лиды.")
+                Text("Нажмите «Найти лиды» вверху: поиск идёт прямо на этом Mac по источникам из раздела «Источники».")
             } actions: {
-                if model.syncConfigured {
-                    Button("Синхронизировать") { Task { await model.syncNow(force: true) } }
-                } else {
-                    SettingsLink { Text("Открыть настройки") }
-                }
+                Button("Найти лиды") { model.runSearch() }.disabled(model.searching)
+                Button("Настроить источники") { model.section = .sources }
             }
         } else {
             ContentUnavailableView.search(text: model.filter.search)
-        }
-    }
-
-    @ToolbarContentBuilder private var toolbarItems: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button { exportShown = true } label: { Label("Экспорт", systemImage: "square.and.arrow.up") }
-                .help("Экспорт выбранных или всех показанных лидов")
-            Button { Task { await model.syncNow() } } label: {
-                Label("Синхронизировать", systemImage: "arrow.triangle.2.circlepath")
-            }
-            .disabled(model.syncing)
-            .help("Забрать свежие результаты из GitHub Actions (⌘R)")
-            Button { Task { await model.dispatchSearch() } } label: { Label("Запустить поиск", systemImage: "play.fill") }
-                .disabled(model.dispatching)
-                .help("Запустить поиск в GitHub Actions сейчас (⇧⌘R)")
-            Button { model.inspectorShown.toggle() } label: { Label("Правая панель", systemImage: "sidebar.right") }
         }
     }
 }

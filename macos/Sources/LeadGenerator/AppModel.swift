@@ -1,5 +1,6 @@
 import AppKit
 import LeadGenCore
+import LeadSearch
 import SwiftUI
 
 enum NavSection: String, Hashable, CaseIterable, Identifiable {
@@ -14,7 +15,7 @@ enum NavSection: String, Hashable, CaseIterable, Identifiable {
         case .archive: return "Архив"
         case .excluded: return "Исключённые"
         case .sources: return "Источники"
-        case .runs: return "История запусков"
+        case .runs: return "Журнал поиска"
         }
     }
     var icon: String {
@@ -45,6 +46,7 @@ struct LeadFilter: Equatable {
 @MainActor
 @Observable
 final class AppModel {
+    let username: String
     private(set) var store: LeadStore?
     var startupError: String?
 
@@ -53,7 +55,6 @@ final class AppModel {
     var pipelineErrors: [PipelineError] = []
     var exclusions: [Exclusion] = []
     var syncLog: [SyncLogEntry] = []
-    var runs: [WorkflowRun] = []
 
     /// Выделение сбрасывается при смене раздела и фильтров, чтобы массовые действия
     /// не задели лиды, которых пользователь больше не видит.
@@ -61,60 +62,73 @@ final class AppModel {
     var filter = LeadFilter() { didSet { if oldValue != filter { selection = [] } } }
     var selection: Set<String> = []
     var inspectorShown = true
-    var selectedSource: String?
+    var selectedSource: String? = SourceKey.rss
 
-    var syncing = false
-    var dispatching = false
     var lastMessage: String?
     var lastError: String?
 
-    private var syncTimer: Timer?
-    private let defaults = UserDefaults.standard
+    // MARK: Поиск
 
-    // MARK: Настройки синхронизации
-
-    var githubOwner: String { didSet { defaults.set(githubOwner, forKey: "sync.owner") } }
-    var githubRepo: String { didSet { defaults.set(githubRepo, forKey: "sync.repo") } }
-    var githubBranch: String { didSet { defaults.set(githubBranch, forKey: "sync.branch") } }
-    var autoSyncMinutes: Int { didSet { defaults.set(autoSyncMinutes, forKey: "sync.interval"); scheduleAutoSync() } }
-    var signature: String { didSet { defaults.set(signature, forKey: "draft.signature") } }
-    var backupDirectory: String { didSet { defaults.set(backupDirectory, forKey: "data.backupDir") } }
-    var autoBackup: Bool { didSet { defaults.set(autoBackup, forKey: "data.autoBackup") } }
-    var keepBackups: Int { didSet { defaults.set(keepBackups, forKey: "data.keepBackups") } }
-
-    var githubConfig: GitHubConfig { GitHubConfig(owner: githubOwner, repo: githubRepo, branch: githubBranch) }
-    var hasToken: Bool { !(Keychain.get("github.token") ?? "").isEmpty }
-    var hasSecret: Bool { !(Keychain.get("state.secret") ?? "").isEmpty }
-    var syncConfigured: Bool { githubConfig.isComplete && hasToken && hasSecret }
-
-    static var defaultDatabasePath: String {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Lead Generator/leads.db").path
+    /// Настройки источников и ключевых слов. Хранятся в базе пользователя.
+    var searchSettings = SearchSettings() {
+        didSet { if oldValue != searchSettings { try? store?.setValue("search.settings", searchSettings.encoded()) } }
     }
+    private(set) var searching = false
+    private(set) var searchProgress: String?
+    private(set) var lastReport: SearchReport?
+    private var searchTask: Task<Void, Never>?
+    private var autoTimer: Timer?
 
-    var databasePath: String { store?.path ?? (defaults.string(forKey: "data.path") ?? Self.defaultDatabasePath) }
+    private let defaults = UserDefaults.standard
+    private func key(_ k: String) -> String { "\(k).\(username.lowercased())" }
 
-    init() {
-        githubOwner = defaults.string(forKey: "sync.owner") ?? "xop1tt"
-        githubRepo = defaults.string(forKey: "sync.repo") ?? "CLIENTS"
-        githubBranch = defaults.string(forKey: "sync.branch") ?? "main"
-        let interval = defaults.integer(forKey: "sync.interval")
-        autoSyncMinutes = defaults.object(forKey: "sync.interval") == nil ? 30 : interval
-        signature = defaults.string(forKey: "draft.signature") ?? ""
+    var autoSearchMinutes: Int { didSet { defaults.set(autoSearchMinutes, forKey: key("search.auto")); scheduleAutoSearch() } }
+    var signature: String { didSet { defaults.set(signature, forKey: key("draft.signature")) } }
+    var backupDirectory: String { didSet { defaults.set(backupDirectory, forKey: key("data.backupDir")) } }
+    var autoBackup: Bool { didSet { defaults.set(autoBackup, forKey: key("data.autoBackup")) } }
+    var keepBackups: Int { didSet { defaults.set(keepBackups, forKey: key("data.keepBackups")) } }
+
+    /// Сервисный ключ VK — в Связке ключей, отдельно для каждого пользователя.
+    var vkToken: String {
+        get { Keychain.get(key("vk.token")) ?? "" }
+        set { Keychain.set(key("vk.token"), newValue.trimmingCharacters(in: .whitespacesAndNewlines)); vkTokenRevision += 1 }
+    }
+    private(set) var vkTokenRevision = 0
+    var hasVKToken: Bool { _ = vkTokenRevision; return !vkToken.isEmpty }
+
+    let defaultDatabasePath: String
+    var databasePath: String { store?.path ?? (defaults.string(forKey: key("data.path")) ?? defaultDatabasePath) }
+
+    init(username: String, dataDirectory: URL) {
+        self.username = username
+        defaultDatabasePath = dataDirectory.appendingPathComponent("leads.db").path
+        let interval = defaults.object(forKey: "search.auto.\(username.lowercased())") as? Int
+        autoSearchMinutes = interval ?? 60
+        signature = defaults.string(forKey: "draft.signature.\(username.lowercased())") ?? ""
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        backupDirectory = defaults.string(forKey: "data.backupDir") ?? docs.appendingPathComponent("Lead Generator Backups").path
-        autoBackup = defaults.object(forKey: "data.autoBackup") as? Bool ?? true
-        let keep = defaults.integer(forKey: "data.keepBackups")
+        backupDirectory = defaults.string(forKey: "data.backupDir.\(username.lowercased())")
+            ?? docs.appendingPathComponent("Lead Generator Backups").appendingPathComponent(username).path
+        autoBackup = defaults.object(forKey: "data.autoBackup.\(username.lowercased())") as? Bool ?? true
+        let keep = defaults.integer(forKey: "data.keepBackups.\(username.lowercased())")
         keepBackups = keep == 0 ? 14 : keep
 
         do {
-            store = try LeadStore(path: defaults.string(forKey: "data.path") ?? Self.defaultDatabasePath)
+            let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath)
+            self.store = store
+            searchSettings = SearchSettings.decode(store.value("search.settings"))
             reload()
             dailyBackupIfNeeded()
         } catch {
             startupError = "Не удалось открыть базу: \(error.localizedDescription)"
         }
-        scheduleAutoSync()
+        scheduleAutoSearch()
+    }
+
+    /// Выход из учётной записи: остановить поиск и таймеры.
+    func shutdown() {
+        searchTask?.cancel()
+        autoTimer?.invalidate()
+        autoTimer = nil
     }
 
     // MARK: Данные
@@ -207,81 +221,64 @@ final class AppModel {
         } catch { lastError = "Не удалось прочитать файл: \(error.localizedDescription)" }
     }
 
-    // MARK: Синхронизация с GitHub Actions
+    // MARK: Поиск лидов на этом Mac
 
-    private func client() -> GitHubClient? {
-        guard githubConfig.isComplete, let token = Keychain.get("github.token"), !token.isEmpty else { return nil }
-        return GitHubClient(config: githubConfig, token: token)
+    var lastSearchAt: Date? { ISODate.parse(store?.value("last_search_at")) }
+
+    func problem(_ source: String) -> String? {
+        SearchEngine.problem(source, searchSettings, SearchSecrets(vkToken: vkToken))
     }
 
-    func syncNow(force: Bool = false) async {
-        guard !syncing, let store else { return }
-        guard let client = client(), let secret = Keychain.get("state.secret"), !secret.isEmpty else {
-            lastError = "Синхронизация не настроена: укажите репозиторий, токен GitHub и ключ шифрования в настройках."
+    /// Запуск поиска. `force` — без учёта интервалов источников; `only` — только эти источники.
+    func runSearch(force: Bool = true, only: Set<String>? = nil, quiet: Bool = false) {
+        guard !searching else { return }
+        // Отдельное соединение с базой: поиск пишет, не мешая интерфейсу.
+        let repository: LeadStore
+        do { repository = try LeadStore(path: databasePath) } catch {
+            lastError = "Поиск не запущен: \(error.localizedDescription)"
             return
         }
-        syncing = true
-        defer { syncing = false }
-        do {
-            let outcome = try await StateSync.sync(store: store, client: client, secret: secret, force: force)
-            if outcome.skipped {
-                lastMessage = "Новых результатов поиска нет"
-            } else {
-                try store.addSyncLog(ok: true, added: outcome.result.added, updated: outcome.result.updated,
-                                     message: "Новых: \(outcome.result.added), обновлено: \(outcome.result.updated)")
-                lastMessage = "Синхронизировано: новых \(outcome.result.added), обновлено \(outcome.result.updated)"
+        let engine = SearchEngine(settings: searchSettings, secrets: SearchSecrets(vkToken: vkToken),
+                                  transport: URLSessionTransport(), repository: repository)
+        searching = true
+        searchProgress = "Подготовка…"
+        searchTask = Task { [weak self] in
+            let report = await engine.run(SearchOptions(force: force, only: only)) { text in
+                Task { @MainActor [weak self] in
+                    if self?.searching == true { self?.searchProgress = text }
+                }
             }
-            reload()
-            await loadRuns()
-        } catch {
-            try? store.addSyncLog(ok: false, message: error.localizedDescription)
-            lastError = error.localizedDescription
-            reload()
-        }
-    }
-
-    func loadRuns() async {
-        guard let client = client() else { return }
-        do { runs = try await client.runs() } catch { lastError = error.localizedDescription }
-    }
-
-    func dispatchSearch(force: Bool = false) async {
-        guard let client = client() else {
-            lastError = "Укажите репозиторий и токен GitHub в настройках, чтобы запускать поиск."
-            return
-        }
-        dispatching = true
-        defer { dispatching = false }
-        do {
-            try await client.dispatch(force: force)
-            lastMessage = "Поиск запущен в GitHub Actions. Результаты появятся после следующей синхронизации."
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            await loadRuns()
-        } catch { lastError = error.localizedDescription }
-    }
-
-    func rerun(_ run: WorkflowRun) async {
-        guard let client = client() else { return }
-        do {
-            try await client.rerunFailed(run.id)
-            lastMessage = "Запуск №\(run.runNumber) отправлен на повтор"
-            await loadRuns()
-        } catch { lastError = error.localizedDescription }
-    }
-
-    var lastSyncAt: Date? { ISODate.parse(store?.value("last_sync_at")) }
-    var lastStateAt: Date? { ISODate.parse(store?.value("last_state_at")) }
-
-    func scheduleAutoSync() {
-        syncTimer?.invalidate()
-        syncTimer = nil
-        guard autoSyncMinutes > 0 else { return }
-        syncTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(autoSyncMinutes * 60), repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.syncConfigured else { return }
-                await self.syncNow()
+            repository.db.close()
+            guard let self else { return }
+            self.searching = false
+            self.searchProgress = nil
+            self.searchTask = nil
+            self.lastReport = report
+            self.reload()
+            if !quiet || report.added > 0 || !report.failed.isEmpty {
+                if report.failed.isEmpty { self.lastMessage = report.summary } else { self.lastError = report.summary }
             }
         }
+    }
+
+    func stopSearch() {
+        searchTask?.cancel()
+        searchProgress = "Останавливаю…"
+    }
+
+    /// Автопоиск, пока приложение открыто: только источники, у которых подошёл интервал.
+    func scheduleAutoSearch() {
+        autoTimer?.invalidate()
+        autoTimer = nil
+        guard autoSearchMinutes > 0 else { return }
+        autoTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(autoSearchMinutes * 60), repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.runSearch(force: false, quiet: true) }
+        }
+    }
+
+    func resetSourceMemory(_ source: String) {
+        act { try $0.resetSourceMemory(source) }
+        lastMessage = "Память источника «\(SourceCatalog.title(source))» сброшена"
     }
 
     // MARK: Экспорт, резервные копии
@@ -328,6 +325,7 @@ final class AppModel {
 
     func restore(from url: URL) {
         guard let store else { return }
+        guard !searching else { lastError = "Дождитесь окончания поиска или остановите его, затем восстановите базу."; return }
         do {
             try store.restore(from: url)
             reload()
@@ -337,9 +335,10 @@ final class AppModel {
 
     func moveDatabase(to dir: URL) {
         guard let store else { return }
+        guard !searching else { lastError = "Дождитесь окончания поиска или остановите его, затем перенесите базу."; return }
         do {
             let path = try store.move(toDirectory: dir)
-            defaults.set(path, forKey: "data.path")
+            defaults.set(path, forKey: key("data.path"))
             lastMessage = "База перенесена: \(path)"
         } catch { lastError = "Перенос не удался: \(error.localizedDescription)" }
     }

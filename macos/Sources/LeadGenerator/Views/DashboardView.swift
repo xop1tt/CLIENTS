@@ -68,9 +68,9 @@ struct DashboardView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    Card(title: "Источники", icon: "cylinder.split.1x2", trailing: "состояние в Actions") {
+                    Card(title: "Источники", icon: "cylinder.split.1x2", trailing: "поиск на этом Mac") {
                         if model.sources.isEmpty {
-                            Text("Появятся после первой синхронизации").appFont(12.5).foregroundStyle(.secondary).scaledPadding(.all, 14)
+                            Text("Появятся после первого поиска").appFont(12.5).foregroundStyle(.secondary).scaledPadding(.all, 14)
                         }
                         ForEach(model.sources) { s in
                             HStack(spacing: 10) {
@@ -121,14 +121,6 @@ struct DashboardView: View {
             .scaledPadding(.all, 20)
         }
         .navigationTitle("Главная")
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button { Task { await model.syncNow() } } label: { Label("Синхронизировать", systemImage: "arrow.triangle.2.circlepath") }
-                    .disabled(model.syncing)
-                Button { Task { await model.dispatchSearch() } } label: { Label("Запустить поиск", systemImage: "play.fill") }
-                    .disabled(model.dispatching)
-            }
-        }
     }
 
     private var kpis: some View {
