@@ -59,7 +59,7 @@ def test_automerge_only_for_dependabot_patch_minor_without_checkout():
 
 
 def test_elevated_permissions_only_in_expected_jobs():
-    allowed = {"release.yml": {"release"}, "codeql.yml": {"analyze"}, "dependabot-automerge.yml": {"automerge"}}
+    allowed = {"release.yml": {"release"}, "dependabot-automerge.yml": {"automerge"}}
     for f in WF.glob("*.yml"):
         wf = yaml.safe_load(f.read_text(encoding="utf-8"))
         for name, job in wf["jobs"].items():
