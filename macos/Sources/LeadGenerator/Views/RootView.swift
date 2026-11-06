@@ -3,8 +3,8 @@ import LeadSearch
 import SwiftUI
 
 struct RootView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.appModel) private var model
+    @Environment(\.look) private var look
 
     var body: some View {
         @Bindable var model = model
@@ -30,8 +30,8 @@ struct RootView: View {
                     }
                     .inspector(isPresented: $model.inspectorShown) {
                         InspectorView()
-                            .environment(model)
-                            .environment(look)
+                            .environment(\.appModel, model)
+                            .environment(\.look, look)
                             .inspectorColumnWidth(min: 300, ideal: 380 * look.scale, max: 560)
                     }
                 if let err = model.lastError {
@@ -66,7 +66,7 @@ struct RootView: View {
 
 /// Правая панель: содержимое зависит от раздела и выбранного объекта.
 struct InspectorView: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     var body: some View {
         Group {
             if model.section.isLeadList || model.section == .home {

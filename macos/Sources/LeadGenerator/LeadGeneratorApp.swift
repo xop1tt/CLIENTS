@@ -51,12 +51,12 @@ enum BackgroundMode {
 struct LeadGeneratorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var session = SessionModel.shared
-    @State private var look = AppearanceSettings()
+    @State private var look = AppearanceSettings.shared
 
     var body: some Scene {
         WindowGroup("Lead Generator", id: "main") {
             SessionRoot()
-                .environment(session)
+                .environment(\.session, session)
                 .modifier(LookRoot(look: look))
                 .frame(minWidth: 980, minHeight: 620)
                 .background(OpenWindowBridge())
@@ -126,7 +126,7 @@ struct LeadGeneratorApp: App {
 
         Settings {
             SettingsRoot()
-                .environment(session)
+                .environment(\.session, session)
                 .modifier(LookRoot(look: look))
         }
 
@@ -135,13 +135,13 @@ struct LeadGeneratorApp: App {
 
 /// Окно приложения: вход или рабочее пространство пользователя.
 struct SessionRoot: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
 
     var body: some View {
         Group {
             if let model = session.current {
                 RootView()
-                    .environment(model)
+                    .environment(\.appModel, model)
                     .id(model.username)
             } else {
                 AuthView()
@@ -154,11 +154,11 @@ struct SessionRoot: View {
 }
 
 struct SettingsRoot: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
 
     var body: some View {
         if let model = session.current {
-            SettingsView().environment(model)
+            SettingsView().environment(\.appModel, model)
         } else {
             ContentUnavailableView("Войдите в учётную запись", systemImage: "person.crop.circle",
                                    description: Text("Настройки поиска и данных у каждого пользователя свои."))

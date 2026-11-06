@@ -5,8 +5,8 @@ import SwiftUI
 
 /// Раздел «Источники»: список слева, настройки выбранного источника справа.
 struct SourcesView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.appModel) private var model
+    @Environment(\.look) private var look
 
     var body: some View {
         @Bindable var model = model
@@ -48,7 +48,7 @@ struct SourcesView: View {
 }
 
 private struct SourceRow: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let key: String
 
     var body: some View {
@@ -88,7 +88,7 @@ private struct SourceRow: View {
 
 /// Настройки одного источника.
 struct SourceEditor: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     let key: String
 
     var body: some View {
@@ -262,7 +262,7 @@ struct SourceEditor: View {
 }
 
 private struct VKTokenField: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
     @State private var token = ""
 
     var body: some View {
@@ -282,7 +282,7 @@ private struct VKTokenField: View {
 
 /// Правая панель раздела «Источники»: состояние и журнал ошибок выбранного источника.
 struct SourcesInspector: View {
-    @Environment(AppModel.self) private var model
+    @Environment(\.appModel) private var model
 
     var body: some View {
         if let key = model.selectedSource {

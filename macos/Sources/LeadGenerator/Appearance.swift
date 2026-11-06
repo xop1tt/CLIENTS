@@ -69,6 +69,7 @@ private extension NSAppearance {
 
 @Observable
 final class AppearanceSettings {
+    static let shared = AppearanceSettings()
     static let systemFont = "Системный"
     static let scaleRange: ClosedRange<Double> = 0.8...1.5
     static let scaleSteps: [Double] = [0.8, 0.9, 1.0, 1.1, 1.25, 1.4, 1.5]
@@ -132,7 +133,7 @@ final class AppearanceSettings {
 
 /// Шрифт с учётом выбранного семейства и масштаба интерфейса.
 struct AppFont: ViewModifier {
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.look) private var look
     let size: CGFloat
     let weight: Font.Weight
     let mono: Bool
@@ -147,7 +148,7 @@ extension View {
 
 /// Отступ, умноженный на масштаб интерфейса.
 struct Scaled: ViewModifier {
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.look) private var look
     let edges: Edge.Set
     let value: CGFloat
     func body(content: Content) -> some View { content.padding(edges, value * look.scale) }
@@ -159,13 +160,13 @@ extension View {
 
 /// Корневой модификатор окна: шрифт по умолчанию, акцент, размер контролов.
 /// Корневой модификатор окна. Получает настройки параметром, а не из окружения:
-/// модификатор стоит снаружи `.environment(look)`, и чтение `@Environment` здесь
+/// модификатор стоит снаружи `.environment(\.look, look)`, и чтение `@Environment` здесь
 /// приводило к падению при запуске (значения в окружении ещё нет).
 struct LookRoot: ViewModifier {
     let look: AppearanceSettings
     func body(content: Content) -> some View {
         content
-            .environment(look)
+            .environment(\.look, look)
             .font(look.font(13))
             .tint(look.accent.color)
             .controlSize(look.controlSize)

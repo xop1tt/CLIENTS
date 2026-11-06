@@ -6,7 +6,7 @@ import SwiftUI
 /// Вход и регистрация: облачная учётная запись (данные синхронизируются между устройствами)
 /// или локальная (данные только на этом Mac). Если облако в сборке не настроено — только локальная.
 struct AuthView: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
 
     var body: some View {
         ZStack {
@@ -45,7 +45,7 @@ struct AuthView: View {
 // MARK: Облако
 
 private struct CloudAuthForm: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var email = ""
     @State private var password = ""
     @State private var confirm = ""
@@ -226,7 +226,7 @@ private struct CloudAuthForm: View {
 // MARK: Локальная учётная запись
 
 private struct LocalAuthForm: View {
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @State private var registering = false
     @State private var username = ""
     @State private var password = ""

@@ -3,10 +3,10 @@ import LeadSearch
 import SwiftUI
 
 struct SidebarView: View {
-    @Environment(AppModel.self) private var model
-    @Environment(AppearanceSettings.self) private var look
+    @Environment(\.appModel) private var model
+    @Environment(\.look) private var look
     @Environment(\.openSettings) private var openSettings
-    @Environment(SessionModel.self) private var session
+    @Environment(\.session) private var session
     @AppStorage("sidebar.hidden") private var hiddenRaw = ""
 
     private var hidden: Set<String> { Set(hiddenRaw.split(separator: ",").map(String.init)) }

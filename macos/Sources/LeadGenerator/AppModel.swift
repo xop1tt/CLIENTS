@@ -138,7 +138,12 @@ final class AppModel {
     let defaultDatabasePath: String
     var databasePath: String { store?.path ?? (defaults.string(forKey: key("data.path")) ?? defaultDatabasePath) }
 
-    init(username: String, displayName: String? = nil, isCloud: Bool = false, dataDirectory: URL) {
+    /// Пустая модель на случай, если представление отрисовалось без модели в окружении
+    /// (например, в отдельно размещённом окне или в момент выхода). Без базы и таймеров.
+    static let placeholder = AppModel(username: "—", dataDirectory: FileManager.default.temporaryDirectory
+        .appendingPathComponent("LeadGenerator-placeholder", isDirectory: true), inert: true)
+
+    init(username: String, displayName: String? = nil, isCloud: Bool = false, dataDirectory: URL, inert: Bool = false) {
         self.username = username
         self.displayName = displayName ?? username
         self.isCloud = isCloud
@@ -152,7 +157,8 @@ final class AppModel {
         autoBackup = defaults.object(forKey: "data.autoBackup.\(username.lowercased())") as? Bool ?? true
         let keep = defaults.integer(forKey: "data.keepBackups.\(username.lowercased())")
         keepBackups = keep == 0 ? 14 : keep
-        vkTokenValue = Keychain.get("vk.token.\(username.lowercased())") ?? ""
+        vkTokenValue = inert ? "" : Keychain.get("vk.token.\(username.lowercased())") ?? ""
+        guard !inert else { return }
 
         do {
             let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath)
