@@ -174,6 +174,7 @@ struct TokenListEditor: View {
             HStack {
                 TextField("", text: $input, prompt: Text(placeholder))
                     .labelsHidden()
+                    .accessibilityLabel(title)
                     .inputField()
                     .onSubmit { add(input); input = "" }
                 Button("Добавить") { add(input); input = "" }

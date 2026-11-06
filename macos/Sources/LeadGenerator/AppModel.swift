@@ -79,6 +79,7 @@ final class AppModel {
     private var searchTask: Task<Void, Never>?
     private var autoTimer: Timer?
     private var searchActivity: NSObjectProtocol?
+    private var backupTimer: Timer?
 
     private let defaults = UserDefaults.standard
     private func key(_ k: String) -> String { "\(k).\(username.lowercased())" }
@@ -119,6 +120,11 @@ final class AppModel {
             searchSettings = SearchSettings.decode(store.value("search.settings"))
             reload()
             dailyBackupIfNeeded()
+            // Приложение может работать в фоне днями: проверяем суточную копию каждый час,
+            // независимо от того, включён ли автопоиск.
+            backupTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.dailyBackupIfNeeded() }
+            }
         } catch {
             startupError = "Не удалось открыть базу: \(error.localizedDescription)"
         }
@@ -130,6 +136,10 @@ final class AppModel {
         searchTask?.cancel()
         autoTimer?.invalidate()
         autoTimer = nil
+        backupTimer?.invalidate()
+        backupTimer = nil
+        if let activity = searchActivity { ProcessInfo.processInfo.endActivity(activity) }
+        searchActivity = nil
     }
 
     // MARK: Данные

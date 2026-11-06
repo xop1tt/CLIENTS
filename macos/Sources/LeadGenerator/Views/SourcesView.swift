@@ -270,6 +270,7 @@ private struct VKTokenField: View {
             Text("Сервисный ключ VK")
             SecureField("", text: $token, prompt: Text(model.hasVKToken ? "сохранён" : "вставьте ключ"))
                 .labelsHidden()
+                .accessibilityLabel("Сервисный ключ VK")
                 .inputField()
             Button("Сохранить") { model.vkToken = token; token = "" }.disabled(token.isEmpty)
             if model.hasVKToken {

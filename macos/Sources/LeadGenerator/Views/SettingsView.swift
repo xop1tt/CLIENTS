@@ -243,6 +243,7 @@ struct AccountSettingsView: View {
             Text(title).font(.callout)
             SecureField("", text: text, prompt: Text(prompt))
                 .labelsHidden()
+                .accessibilityLabel(title)
                 .inputField()
                 .frame(maxWidth: 320)
         }
@@ -337,6 +338,7 @@ struct ExclusionsSettingsView: View {
                         .labelsHidden().fixedSize()
                     TextField("", text: $value, prompt: Text("например, example.ru или +7 843 000-00-00"))
                         .labelsHidden()
+                        .accessibilityLabel("Значение исключения")
                         .inputField()
                         .onSubmit(add)
                     Button("Добавить", action: add).disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
