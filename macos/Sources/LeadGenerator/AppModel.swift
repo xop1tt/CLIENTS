@@ -78,6 +78,8 @@ final class AppModel {
     private(set) var lastReport: SearchReport?
     private var searchTask: Task<Void, Never>?
     private var autoTimer: Timer?
+    private var searchActivity: NSObjectProtocol?
+    private var backupTimer: Timer?
 
     private let defaults = UserDefaults.standard
     private func key(_ k: String) -> String { "\(k).\(username.lowercased())" }
@@ -118,6 +120,11 @@ final class AppModel {
             searchSettings = SearchSettings.decode(store.value("search.settings"))
             reload()
             dailyBackupIfNeeded()
+            // Приложение может работать в фоне днями: проверяем суточную копию каждый час,
+            // независимо от того, включён ли автопоиск.
+            backupTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.dailyBackupIfNeeded() }
+            }
         } catch {
             startupError = "Не удалось открыть базу: \(error.localizedDescription)"
         }
@@ -129,6 +136,10 @@ final class AppModel {
         searchTask?.cancel()
         autoTimer?.invalidate()
         autoTimer = nil
+        backupTimer?.invalidate()
+        backupTimer = nil
+        if let activity = searchActivity { ProcessInfo.processInfo.endActivity(activity) }
+        searchActivity = nil
     }
 
     // MARK: Данные
@@ -242,6 +253,9 @@ final class AppModel {
                                   transport: URLSessionTransport(), repository: repository)
         searching = true
         searchProgress = "Подготовка…"
+        // Не даём macOS усыпить поиск (App Nap), когда окно закрыто или свёрнуто.
+        searchActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                                                               reason: "Поиск лидов")
         searchTask = Task { [weak self] in
             let report = await engine.run(SearchOptions(force: force, only: only)) { text in
                 Task { @MainActor [weak self] in
@@ -251,10 +265,14 @@ final class AppModel {
             repository.db.close()
             guard let self else { return }
             self.searching = false
+            if let activity = self.searchActivity { ProcessInfo.processInfo.endActivity(activity) }
+            self.searchActivity = nil
             self.searchProgress = nil
             self.searchTask = nil
             self.lastReport = report
             self.reload()
+            // При работе в фоне приложение может не перезапускаться днями: копия раз в сутки и после поиска.
+            self.dailyBackupIfNeeded()
             if !quiet || report.added > 0 || !report.failed.isEmpty {
                 if report.failed.isEmpty { self.lastMessage = report.summary } else { self.lastError = report.summary }
             }

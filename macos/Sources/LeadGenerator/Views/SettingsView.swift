@@ -156,6 +156,7 @@ private struct PreviewRow: View {
 
 struct SearchSettingsView: View {
     @Environment(AppModel.self) private var model
+    @AppStorage(BackgroundMode.key) private var keepRunning = true
 
     var body: some View {
         @Bindable var model = model
@@ -172,18 +173,23 @@ struct SearchSettingsView: View {
                     Text("Каждый час").tag(60)
                     Text("Каждые 3 часа").tag(180)
                 }
-                Text("Пока приложение открыто, оно проверяет только те источники, у которых подошёл их интервал. Кнопка «Найти лиды» проверяет все включённые источники сразу.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Section {
                 HStack {
-                    Button(model.searching ? "Остановить поиск" : "Найти лиды сейчас") {
+                    Button(model.searching ? "Остановить поиск" : "Проверить сейчас") {
                         if model.searching { model.stopSearch() } else { model.runSearch() }
                     }
-                    Spacer()
                     if model.searching { ProgressView().controlSize(.small) }
+                    Spacer()
+                    if let at = model.lastSearchAt { Text("Последний поиск: \(at.fullRu)").font(.caption).foregroundStyle(.secondary) }
                 }
-                if let at = model.lastSearchAt { Text("Последний поиск: \(at.fullRu)").font(.caption).foregroundStyle(.secondary) }
+                Text("Проверяются только те источники, у которых подошёл их интервал. «Проверить сейчас» и кнопка «Найти лиды» проверяют все включённые источники сразу.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("После закрытия окна") {
+                Toggle("Продолжать работу в фоне", isOn: $keepRunning)
+                Text(keepRunning
+                     ? "Если закрыть окно, приложение остаётся в строке меню и продолжает искать лиды по расписанию. Открыть окно или завершить работу можно через значок в строке меню."
+                     : "Закрытие окна завершает приложение, поиск по расписанию останавливается.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -209,9 +215,9 @@ struct AccountSettingsView: View {
                 Button("Выйти из учётной записи") { session.logout() }
             }
             Section("Сменить пароль") {
-                SecureField("Текущий пароль", text: $old)
-                SecureField("Новый пароль", text: $new)
-                SecureField("Повторите новый пароль", text: $again)
+                passwordField("Текущий пароль", $old)
+                passwordField("Новый пароль", $new, prompt: "не меньше 8 символов")
+                passwordField("Повторите новый пароль", $again)
                 HStack {
                     Button("Сменить пароль") {
                         result = session.changePassword(old: old, new: new, confirm: again)
@@ -230,6 +236,18 @@ struct AccountSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func passwordField(_ title: String, _ text: Binding<String>, prompt: String = "") -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.callout)
+            SecureField("", text: text, prompt: Text(prompt))
+                .labelsHidden()
+                .accessibilityLabel(title)
+                .inputField()
+                .frame(maxWidth: 320)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -286,6 +304,7 @@ struct DataSettingsView: View {
                     }
                 }
             }
+            CloudBackupSection()
             Section("Перенос на другой Mac") {
                 Text("Скопируйте файл базы (или любую резервную копию) на новый Mac и выберите его в «Восстановить из файла…». Ключ VK в копию не попадает — введите его заново в разделе «Источники».")
                     .font(.callout).foregroundStyle(.secondary)
@@ -317,7 +336,10 @@ struct ExclusionsSettingsView: View {
                 HStack {
                     Picker("", selection: $kind) { ForEach(ExclusionKind.allCases, id: \.self) { Text($0.title).tag($0) } }
                         .labelsHidden().fixedSize()
-                    TextField("например, example.ru или +7 843 000-00-00", text: $value)
+                    TextField("", text: $value, prompt: Text("например, example.ru или +7 843 000-00-00"))
+                        .labelsHidden()
+                        .accessibilityLabel("Значение исключения")
+                        .inputField()
                         .onSubmit(add)
                     Button("Добавить", action: add).disabled(value.trimmingCharacters(in: .whitespaces).isEmpty)
                 }

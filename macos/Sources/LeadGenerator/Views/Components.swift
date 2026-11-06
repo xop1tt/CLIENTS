@@ -172,8 +172,10 @@ struct TokenListEditor: View {
                 }
             }
             HStack {
-                TextField(placeholder, text: $input)
-                    .textFieldStyle(.roundedBorder)
+                TextField("", text: $input, prompt: Text(placeholder))
+                    .labelsHidden()
+                    .accessibilityLabel(title)
+                    .inputField()
                     .onSubmit { add(input); input = "" }
                 Button("Добавить") { add(input); input = "" }
                     .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -280,5 +282,13 @@ struct FlowLayout: Layout {
             rows[rows.count - 1] = row
         }
         return rows
+    }
+}
+
+extension View {
+    /// Поле ввода с рамкой и текстом от левого края.
+    /// В формах macOS поля по умолчанию без рамки и прижаты вправо.
+    func inputField() -> some View {
+        textFieldStyle(.roundedBorder).multilineTextAlignment(.leading)
     }
 }
