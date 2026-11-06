@@ -74,7 +74,9 @@ final class AppModel {
     var selectedSource: String? = SourceKey.rss
 
     var lastMessage: String?
-    var lastError: String?
+    var lastError: String? {
+        didSet { if let lastError, lastError != oldValue { ReportController.log(lastError) } }
+    }
 
     // MARK: Поиск
 
@@ -91,6 +93,8 @@ final class AppModel {
     private(set) var lastReport: SearchReport?
     private var searchTask: Task<Void, Never>?
     private var autoTimer: Timer?
+    private var searchActivity: NSObjectProtocol?
+    private var backupTimer: Timer?
 
     private let defaults = UserDefaults.standard
     private func key(_ k: String) -> String { "\(k).\(username.lowercased())" }
@@ -119,12 +123,17 @@ final class AppModel {
     var keepBackups: Int { didSet { defaults.set(keepBackups, forKey: key("data.keepBackups")) } }
 
     /// Сервисный ключ VK — в Связке ключей, отдельно для каждого пользователя.
+    /// Читается из Связки ключей один раз при входе: представления обращаются к ключу при каждой перерисовке.
     var vkToken: String {
-        get { Keychain.get(key("vk.token")) ?? "" }
-        set { Keychain.set(key("vk.token"), newValue.trimmingCharacters(in: .whitespacesAndNewlines)); vkTokenRevision += 1 }
+        get { vkTokenValue }
+        set {
+            let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            Keychain.set(key("vk.token"), value)
+            vkTokenValue = value
+        }
     }
-    private(set) var vkTokenRevision = 0
-    var hasVKToken: Bool { _ = vkTokenRevision; return !vkToken.isEmpty }
+    private var vkTokenValue = ""
+    var hasVKToken: Bool { !vkTokenValue.isEmpty }
 
     let defaultDatabasePath: String
     var databasePath: String { store?.path ?? (defaults.string(forKey: key("data.path")) ?? defaultDatabasePath) }
@@ -143,6 +152,7 @@ final class AppModel {
         autoBackup = defaults.object(forKey: "data.autoBackup.\(username.lowercased())") as? Bool ?? true
         let keep = defaults.integer(forKey: "data.keepBackups.\(username.lowercased())")
         keepBackups = keep == 0 ? 14 : keep
+        vkTokenValue = Keychain.get("vk.token.\(username.lowercased())") ?? ""
 
         do {
             let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath)
@@ -154,6 +164,11 @@ final class AppModel {
             reloadSyncedSettings()
             reload()
             dailyBackupIfNeeded()
+            // Приложение может работать в фоне днями: проверяем суточную копию каждый час,
+            // независимо от того, включён ли автопоиск.
+            backupTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.dailyBackupIfNeeded() }
+            }
         } catch {
             startupError = "Не удалось открыть базу: \(error.localizedDescription)"
         }
@@ -176,6 +191,10 @@ final class AppModel {
         searchTask?.cancel()
         autoTimer?.invalidate()
         autoTimer = nil
+        backupTimer?.invalidate()
+        backupTimer = nil
+        if let activity = searchActivity { ProcessInfo.processInfo.endActivity(activity) }
+        searchActivity = nil
     }
 
     // MARK: Данные
@@ -188,7 +207,12 @@ final class AppModel {
             pipelineErrors = try store.pipelineErrors()
             exclusions = try store.exclusions()
             syncLog = try store.syncLog()
-            selection = selection.intersection(Set(leads.map(\.id)))
+            let last = ISODate.parse(store.value("last_search_at"))
+            if last != lastSearchAt { lastSearchAt = last }
+            // Присваиваем только при изменении: любое присваивание заставляет перестраивать
+            // главное меню и таблицу, даже если значение то же самое.
+            let kept = selection.intersection(Set(leads.map(\.id)))
+            if kept != selection { selection = kept }
         } catch { lastError = error.localizedDescription }
     }
 
@@ -270,7 +294,9 @@ final class AppModel {
 
     // MARK: Поиск лидов на этом Mac
 
-    var lastSearchAt: Date? { ISODate.parse(store?.value("last_search_at")) }
+    /// Время последнего поиска. Хранится в памяти и обновляется в `reload()`,
+    /// чтобы не читать базу и не разбирать дату при каждой перерисовке.
+    private(set) var lastSearchAt: Date?
 
     func problem(_ source: String) -> String? {
         SearchEngine.problem(source, searchSettings, SearchSecrets(vkToken: vkToken))
@@ -289,6 +315,9 @@ final class AppModel {
                                   transport: URLSessionTransport(), repository: repository)
         searching = true
         searchProgress = "Подготовка…"
+        // Не даём macOS усыпить поиск (App Nap), когда окно закрыто или свёрнуто.
+        searchActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                                                               reason: "Поиск лидов")
         searchTask = Task { [weak self] in
             let report = await engine.run(SearchOptions(force: force, only: only)) { text in
                 Task { @MainActor [weak self] in
@@ -298,11 +327,15 @@ final class AppModel {
             repository.db.close()
             guard let self else { return }
             self.searching = false
+            if let activity = self.searchActivity { ProcessInfo.processInfo.endActivity(activity) }
+            self.searchActivity = nil
             self.searchProgress = nil
             self.searchTask = nil
             self.lastReport = report
             self.reload()
             if report.added > 0 || report.updated > 0 { self.onLocalChange?() }
+            // При работе в фоне приложение может не перезапускаться днями: копия раз в сутки и после поиска.
+            self.dailyBackupIfNeeded()
             if !quiet || report.added > 0 || !report.failed.isEmpty {
                 if report.failed.isEmpty { self.lastMessage = report.summary } else { self.lastError = report.summary }
             }

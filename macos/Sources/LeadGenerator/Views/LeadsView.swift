@@ -17,7 +17,8 @@ struct LeadsView: View {
             filterBar
             Divider()
             if items.isEmpty {
-                emptyState
+                // Пустой экран занимает всё место, чтобы строка состояния оставалась внизу.
+                emptyState.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 table
             }
@@ -29,6 +30,8 @@ struct LeadsView: View {
         .navigationSubtitle("\(items.count)")
         .sheet(isPresented: $exportShown) {
             ExportSheet(items: model.selection.isEmpty ? items : items.filter { model.selection.contains($0.id) })
+                .environment(model)
+                .environment(look)
         }
         .onChange(of: model.selection) { _, ids in
             // Открытый лид считается просмотренным.
@@ -40,7 +43,9 @@ struct LeadsView: View {
 
     private var table: some View {
         @Bindable var model = model
-        return Table(items, selection: $model.selection, sortOrder: $sortOrder) {
+        return Table(items, selection: Binding(get: { model.selection },
+                                               set: { if $0 != model.selection { model.selection = $0 } }),
+                     sortOrder: $sortOrder) {
             TableColumn("") { (l: LeadItem) in
                 Button { model.toggleFavorite([l.id]) } label: {
                     Image(systemName: l.favorite ? "star.fill" : "star")
@@ -163,6 +168,7 @@ struct LeadsView: View {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField("Поиск по названию, контактам, тексту", text: $model.filter.search)
                     .textFieldStyle(.plain)
+                    .multilineTextAlignment(.leading)
                 if !model.filter.search.isEmpty {
                     Button { model.filter.search = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain).foregroundStyle(.secondary)
@@ -238,12 +244,13 @@ struct LeadsView: View {
             Label("Все данные хранятся на этом Mac", systemImage: "lock.shield")
             Text(model.databasePath.replacingOccurrences(of: NSHomeDirectory(), with: "~")).lineLimit(1).truncationMode(.middle)
             Spacer()
-            if let at = model.lastSearchAt { Text("Последний поиск: \(at.shortRelative)") }
+            Text(model.lastSearchAt.map { "Последний поиск: \($0.shortRelative)" } ?? "Поиск ещё не запускался")
         }
+        .lineLimit(1)
         .appFont(11)
         .foregroundStyle(.secondary)
         .scaledPadding(.horizontal, 14)
-        .scaledPadding(.vertical, 5)
+        .frame(height: 26 * look.scale)
     }
 
     @ViewBuilder private var emptyState: some View {

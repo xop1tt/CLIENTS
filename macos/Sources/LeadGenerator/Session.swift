@@ -36,6 +36,9 @@ final class SessionModel {
 
     private static let rememberKey = "session.user"
 
+    /// Одна сессия на приложение: её используют и окна SwiftUI, и значок в строке меню (AppKit).
+    static let shared = SessionModel()
+
     init() {
         do {
             auth = try LocalAuthService(root: Self.rootDirectory)

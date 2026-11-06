@@ -14,8 +14,11 @@ struct RootView: View {
         } detail: {
             ZStack(alignment: .bottom) {
                 content
+                    // Содержимое панели инструментов и правой панели AppKit размещает в отдельных
+                    // контейнерах; окружение передаём явно, иначе SwiftUI может не найти модель
+                    // при перерисовке и аварийно завершить приложение.
                     .toolbar {
-                        ToolbarItem(placement: .principal) { SearchButton() }
+                        ToolbarItem(placement: .principal) { SearchButton(model: model) }
                         // Последний элемент панели — у её правого края.
                         ToolbarItem(placement: .primaryAction) {
                             Button { model.inspectorShown.toggle() } label: {
@@ -27,6 +30,8 @@ struct RootView: View {
                     }
                     .inspector(isPresented: $model.inspectorShown) {
                         InspectorView()
+                            .environment(model)
+                            .environment(look)
                             .inspectorColumnWidth(min: 300, ideal: 380 * look.scale, max: 560)
                     }
                 if let err = model.lastError {
@@ -85,7 +90,7 @@ struct InspectorView: View {
 
 /// Зелёная кнопка поиска в центре верхней панели.
 struct SearchButton: View {
-    @Environment(AppModel.self) private var model
+    let model: AppModel
 
     var body: some View {
         Button {

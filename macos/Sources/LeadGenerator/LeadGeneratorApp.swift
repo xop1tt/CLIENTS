@@ -6,14 +6,25 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var themeObserver: NSObjectProtocol?
 
+    private let statusItem = StatusItemController()
+    private var defaultsObserver: NSObjectProtocol?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Запуск из `swift run` / без .app-обёртки: показать окно и значок в Dock.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         updateDockIcon()
+        statusItem.setVisible(BackgroundMode.enabled)
+        // Переключатель «Продолжать работу в фоне» хранится в UserDefaults.
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.statusItem.setVisible(BackgroundMode.enabled) } }
         themeObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.updateDockIcon() } }
+        UpdateController.shared.startAutomaticChecks()
+        // Отчёт о прошлом вылете предлагается, когда окно уже на экране.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { ReportController.shared.checkAfterLaunch() }
     }
 
     /// Значок в Dock следует теме macOS: светлый (из AppIcon.icns) или тёмный (AppIcon-Dark.png).
@@ -27,13 +38,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    /// Работа в фоне: при закрытом окне приложение остаётся в строке меню и ищет по расписанию.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !BackgroundMode.enabled }
+}
+
+enum BackgroundMode {
+    static let key = "app.keepRunning"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }
 
 @main
 struct LeadGeneratorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-    @State private var session = SessionModel()
+    @State private var session = SessionModel.shared
     @State private var look = AppearanceSettings()
 
     var body: some Scene {
@@ -42,27 +59,43 @@ struct LeadGeneratorApp: App {
                 .environment(session)
                 .modifier(LookRoot(look: look))
                 .frame(minWidth: 980, minHeight: 620)
+                .background(OpenWindowBridge())
                 .onAppear { look.apply() }
         }
         .defaultSize(width: 1440, height: 900)
         .commands {
             CommandGroup(replacing: .newItem) {}
-            CommandMenu("Лиды") {
-                Button(session.current?.searching == true ? "Остановить поиск" : "Найти лиды") {
-                    guard let model = session.current else { return }
-                    if model.searching { model.stopSearch() } else { model.runSearch() }
+            CommandGroup(after: .appInfo) {
+                Button("Проверить обновления…") { UpdateController.shared.check(manual: true) }
+            }
+            CommandGroup(replacing: .help) {
+                Button("Сообщить о проблеме…") { ReportController.shared.compose(crash: nil) }
+                Button("Отправить отчёт о последнем сбое…") {
+                    ReportController.shared.refresh()
+                    ReportController.shared.compose(crash: ReportController.shared.crashes.first)
                 }
-                .keyboardShortcut("r", modifiers: .command)
-                .disabled(session.current == nil)
+                Divider()
+                Link("Страница проекта на GitHub", destination: Updates.releasesPage.deletingLastPathComponent())
+            }
+            // Команды не зависят от часто меняющегося состояния (выделение, ход поиска):
+            // иначе SwiftUI перестраивает главное меню на каждое изменение, и при частых
+            // обновлениях приложение зависало. Действия сами проверяют, можно ли их выполнить.
+            CommandMenu("Лиды") {
+                Button("Найти лиды") { session.current?.runSearch() }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .disabled(session.current == nil)
+                Button("Остановить поиск") { session.current?.stopSearch() }
+                    .keyboardShortcut(".", modifiers: .command)
+                    .disabled(session.current == nil)
                 Divider()
                 Button("Отметить все как просмотренные") { session.current?.markAllSeen() }
                     .disabled(session.current == nil)
-                Button("В избранное") { if let m = session.current { m.toggleFavorite(m.selection) } }
+                Button("В избранное") { if let m = session.current, !m.selection.isEmpty { m.toggleFavorite(m.selection) } }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
-                    .disabled(session.current?.selection.isEmpty ?? true)
-                Button("В архив") { if let m = session.current { m.setArchived(m.selection, true) } }
+                    .disabled(session.current == nil)
+                Button("В архив") { if let m = session.current, !m.selection.isEmpty { m.setArchived(m.selection, true) } }
                     .keyboardShortcut("e", modifiers: .command)
-                    .disabled(session.current?.selection.isEmpty ?? true)
+                    .disabled(session.current == nil)
                 Divider()
                 Button("Выйти из учётной записи") { session.logout() }
                     .disabled(session.current == nil)
@@ -83,7 +116,7 @@ struct LeadGeneratorApp: App {
                 }
             }
             CommandGroup(after: .sidebar) {
-                Button(session.current?.inspectorShown == false ? "Показать правую панель" : "Скрыть правую панель") {
+                Button("Показать или скрыть правую панель") {
                     session.current?.inspectorShown.toggle()
                 }
                 .keyboardShortcut("i", modifiers: [.command, .option])
@@ -96,6 +129,7 @@ struct LeadGeneratorApp: App {
                 .environment(session)
                 .modifier(LookRoot(look: look))
         }
+
     }
 }
 
