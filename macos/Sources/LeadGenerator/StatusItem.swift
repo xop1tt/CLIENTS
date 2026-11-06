@@ -84,13 +84,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 /// Запоминает действие «открыть окно», чтобы значок в строке меню мог открыть закрытое окно.
 struct OpenWindowBridge: View {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         Color.clear
             .frame(width: 0, height: 0)
             .onAppear {
                 let open = openWindow
+                let settings = openSettings
                 StatusItemController.openMainWindow = { open(id: "main") }
+                // Пункты верхнего меню открывают настройки на нужном разделе.
+                MenuActions.openSettingsAction = { settings() }
             }
     }
 }
