@@ -91,12 +91,17 @@ final class AppModel {
     var keepBackups: Int { didSet { defaults.set(keepBackups, forKey: key("data.keepBackups")) } }
 
     /// Сервисный ключ VK — в Связке ключей, отдельно для каждого пользователя.
+    /// Читается из Связки ключей один раз при входе: представления обращаются к ключу при каждой перерисовке.
     var vkToken: String {
-        get { Keychain.get(key("vk.token")) ?? "" }
-        set { Keychain.set(key("vk.token"), newValue.trimmingCharacters(in: .whitespacesAndNewlines)); vkTokenRevision += 1 }
+        get { vkTokenValue }
+        set {
+            let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            Keychain.set(key("vk.token"), value)
+            vkTokenValue = value
+        }
     }
-    private(set) var vkTokenRevision = 0
-    var hasVKToken: Bool { _ = vkTokenRevision; return !vkToken.isEmpty }
+    private var vkTokenValue = ""
+    var hasVKToken: Bool { !vkTokenValue.isEmpty }
 
     let defaultDatabasePath: String
     var databasePath: String { store?.path ?? (defaults.string(forKey: key("data.path")) ?? defaultDatabasePath) }
@@ -113,6 +118,7 @@ final class AppModel {
         autoBackup = defaults.object(forKey: "data.autoBackup.\(username.lowercased())") as? Bool ?? true
         let keep = defaults.integer(forKey: "data.keepBackups.\(username.lowercased())")
         keepBackups = keep == 0 ? 14 : keep
+        vkTokenValue = Keychain.get("vk.token.\(username.lowercased())") ?? ""
 
         do {
             let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath)
@@ -152,7 +158,12 @@ final class AppModel {
             pipelineErrors = try store.pipelineErrors()
             exclusions = try store.exclusions()
             syncLog = try store.syncLog()
-            selection = selection.intersection(Set(leads.map(\.id)))
+            let last = ISODate.parse(store.value("last_search_at"))
+            if last != lastSearchAt { lastSearchAt = last }
+            // Присваиваем только при изменении: любое присваивание заставляет перестраивать
+            // главное меню и таблицу, даже если значение то же самое.
+            let kept = selection.intersection(Set(leads.map(\.id)))
+            if kept != selection { selection = kept }
         } catch { lastError = error.localizedDescription }
     }
 
@@ -234,7 +245,9 @@ final class AppModel {
 
     // MARK: Поиск лидов на этом Mac
 
-    var lastSearchAt: Date? { ISODate.parse(store?.value("last_search_at")) }
+    /// Время последнего поиска. Хранится в памяти и обновляется в `reload()`,
+    /// чтобы не читать базу и не разбирать дату при каждой перерисовке.
+    private(set) var lastSearchAt: Date?
 
     func problem(_ source: String) -> String? {
         SearchEngine.problem(source, searchSettings, SearchSecrets(vkToken: vkToken))
