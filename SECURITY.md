@@ -1,21 +1,15 @@
-# Security Policy
+# Политика безопасности
 
-## Supported Versions
+Поддерживается только последняя версия из ветки `main` и последний релиз.
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+## Сообщить об уязвимости
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Не создавайте публичный issue. Откройте приватное сообщение через
+**Security → Report a vulnerability** в этом репозитории. Ответ обычно в течение нескольких дней.
 
-## Reporting a Vulnerability
+## Что настроено
 
-Use this section to tell people how to report a vulnerability.
-
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+- Ветка `main` защищена: слияние только через PR после зелёных проверок.
+- CodeQL, dependency review, Dependabot, secret scanning и push protection.
+- Действия в workflows закреплены по SHA, права токена минимальные.
+- Секреты и данные лидов в репозиторий не коммитятся.

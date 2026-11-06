@@ -50,3 +50,18 @@ def test_no_data_files_tracked():
     gi = (WF.parents[1] / ".gitignore").read_text()
     for pattern in ("state/", "*.db", "*.csv", ".env"):
         assert pattern in gi
+
+
+def test_automerge_only_for_dependabot_patch_minor_without_checkout():
+    text = (WF / "dependabot-automerge.yml").read_text(encoding="utf-8")
+    assert "dependabot[bot]" in text and "semver-patch" in text and "semver-minor" in text
+    assert "semver-major" not in text and "actions/checkout" not in text
+
+
+def test_elevated_permissions_only_in_expected_jobs():
+    allowed = {"release.yml": {"release"}, "codeql.yml": {"analyze"}, "dependabot-automerge.yml": {"automerge"}}
+    for f in WF.glob("*.yml"):
+        wf = yaml.safe_load(f.read_text(encoding="utf-8"))
+        for name, job in wf["jobs"].items():
+            if "permissions" in job:
+                assert name in allowed.get(f.name, set()), f"{f.name}:{name} повышает права"
