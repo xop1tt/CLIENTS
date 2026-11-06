@@ -1,16 +1,23 @@
 name: Release
 
-# Релиз создаётся пушем тега вида v1.0.0: собирается приложение для macOS
-# и прикрепляется к GitHub Release вместе с заметками из .github/release-notes/<тег>.md.
+# Релиз создаётся пушем тега вида v1.0.0 или вручную (Actions → Release → Run workflow):
+# собирается приложение для macOS и прикрепляется к GitHub Release вместе с заметками
+# из .github/release-notes/<тег>.md. При ручном запуске тег ставится на выбранный коммит ветки.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Тег релиза, например v1.0.0"
+        required: true
+        default: "v1.0.0"
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -32,7 +39,7 @@ jobs:
         working-directory: macos
         env:
           UNIVERSAL: "1"
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           export LEADGEN_VERSION="${TAG#v}"
           ./scripts/build-app.sh build
@@ -42,12 +49,16 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
+          files=("macos/build/Lead-Generator-${TAG}-macOS.zip" "macos/build/Lead-Generator-${TAG}-macOS.zip.sha256")
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Релиз уже создан (например, через интерфейс GitHub): только прикладываем файлы.
+            gh release upload "$TAG" "${files[@]}" --clobber
+            exit 0
+          fi
           notes=".github/release-notes/${TAG}.md"
-          args=(--title "Lead Generator ${TAG#v}" --verify-tag)
+          args=(--title "Lead Generator ${TAG#v}" --target "$GITHUB_SHA")
           if [ -f "$notes" ]; then args+=(--notes-file "$notes"); else args+=(--generate-notes); fi
-          gh release create "$TAG" \
-            "macos/build/Lead-Generator-${TAG}-macOS.zip" \
-            "macos/build/Lead-Generator-${TAG}-macOS.zip.sha256" \
-            "${args[@]}"
+          gh release create "$TAG" "${files[@]}" "${args[@]}"
