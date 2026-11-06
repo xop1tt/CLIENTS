@@ -143,7 +143,7 @@ public final class SearchEngine {
         let cursor = repo.sourceCursor(key)
         switch key {
         case SourceKey.rss:
-            let http = SourceHTTP(name: "FL.ru и RSS", transport: transport, minInterval: 2,
+            let http = SourceHTTP(name: "RSS-ленты", transport: transport, minInterval: 2,
                                   maxRequests: max(5, settings.rss.feeds.count * 2), sleep: sleep)
             return try await RSSSource.fetch(settings.rss, cursor: cursor, http: http)
         case SourceKey.telegram:

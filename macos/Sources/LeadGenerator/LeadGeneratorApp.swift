@@ -27,7 +27,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    /// Работа в фоне: при закрытом окне приложение остаётся в строке меню и ищет по расписанию.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !BackgroundMode.enabled }
+}
+
+enum BackgroundMode {
+    static let key = "app.keepRunning"
+    static var enabled: Bool { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
 }
 
 @main
@@ -35,6 +41,7 @@ struct LeadGeneratorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var session = SessionModel()
     @State private var look = AppearanceSettings()
+    @AppStorage(BackgroundMode.key) private var keepRunning = true
 
     var body: some Scene {
         WindowGroup("Lead Generator", id: "main") {
@@ -96,6 +103,43 @@ struct LeadGeneratorApp: App {
                 .environment(session)
                 .modifier(LookRoot(look: look))
         }
+
+        // Значок в строке меню: поиск и окно, пока приложение работает в фоне.
+        MenuBarExtra(isInserted: $keepRunning) {
+            StatusMenu(session: session)
+        } label: {
+            Image(systemName: session.current?.searching == true ? "magnifyingglass.circle.fill" : "megaphone")
+        }
+    }
+}
+
+/// Меню значка в строке меню. Модель передаётся параметром: у этого меню своё окружение.
+struct StatusMenu: View {
+    let session: SessionModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        if let model = session.current {
+            Text(model.searching ? (model.searchProgress ?? "Идёт поиск…")
+                 : model.lastSearchAt.map { "Последний поиск: \($0.shortRelative)" } ?? "Поиск ещё не запускался")
+            Button(model.searching ? "Остановить поиск" : "Найти лиды") {
+                if model.searching { model.stopSearch() } else { model.runSearch() }
+            }
+        } else {
+            Text("Вход не выполнен")
+        }
+        Divider()
+        Button("Открыть Lead Generator") {
+            NSApp.activate(ignoringOtherApps: true)
+            if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true && $0.canBecomeMain }) {
+                window.makeKeyAndOrderFront(nil)
+            } else {
+                openWindow(id: "main")
+            }
+        }
+        Divider()
+        Button("Завершить Lead Generator") { NSApp.terminate(nil) }
+            .keyboardShortcut("q")
     }
 }
 

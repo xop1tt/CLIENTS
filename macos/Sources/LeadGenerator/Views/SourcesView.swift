@@ -267,7 +267,10 @@ private struct VKTokenField: View {
 
     var body: some View {
         HStack {
-            SecureField("Сервисный ключ VK", text: $token, prompt: Text(model.hasVKToken ? "сохранён" : "вставьте ключ"))
+            Text("Сервисный ключ VK")
+            SecureField("", text: $token, prompt: Text(model.hasVKToken ? "сохранён" : "вставьте ключ"))
+                .labelsHidden()
+                .inputField()
             Button("Сохранить") { model.vkToken = token; token = "" }.disabled(token.isEmpty)
             if model.hasVKToken {
                 Button("Удалить", role: .destructive) { model.vkToken = "" }

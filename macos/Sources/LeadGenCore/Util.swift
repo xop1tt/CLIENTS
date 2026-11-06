@@ -81,8 +81,8 @@ public enum SourceCatalog {
     }
 
     public static let known: [String: Info] = [
-        "fl_ru": Info(title: "FL.ru и RSS", access: "Бесплатно",
-                      note: "Публичные RSS-ленты заказов: FL.ru и любые другие. Ленты хранят только последние записи."),
+        "fl_ru": Info(title: "RSS-ленты", access: "Бесплатно",
+                      note: "Любые публичные RSS- и Atom-ленты заказов, например FL.ru. Ленты хранят только последние записи."),
         "telegram_channels": Info(title: "Telegram-каналы", access: "Бесплатно",
                                   note: "Только публичные каналы с веб-превью t.me/s. Bot API чужие каналы не читает."),
         "vk_communities": Info(title: "VK-сообщества", access: "Бесплатный ключ",

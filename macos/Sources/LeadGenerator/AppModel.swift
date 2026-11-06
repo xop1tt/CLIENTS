@@ -78,6 +78,7 @@ final class AppModel {
     private(set) var lastReport: SearchReport?
     private var searchTask: Task<Void, Never>?
     private var autoTimer: Timer?
+    private var searchActivity: NSObjectProtocol?
 
     private let defaults = UserDefaults.standard
     private func key(_ k: String) -> String { "\(k).\(username.lowercased())" }
@@ -242,6 +243,9 @@ final class AppModel {
                                   transport: URLSessionTransport(), repository: repository)
         searching = true
         searchProgress = "Подготовка…"
+        // Не даём macOS усыпить поиск (App Nap), когда окно закрыто или свёрнуто.
+        searchActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                                                               reason: "Поиск лидов")
         searchTask = Task { [weak self] in
             let report = await engine.run(SearchOptions(force: force, only: only)) { text in
                 Task { @MainActor [weak self] in
@@ -251,10 +255,14 @@ final class AppModel {
             repository.db.close()
             guard let self else { return }
             self.searching = false
+            if let activity = self.searchActivity { ProcessInfo.processInfo.endActivity(activity) }
+            self.searchActivity = nil
             self.searchProgress = nil
             self.searchTask = nil
             self.lastReport = report
             self.reload()
+            // При работе в фоне приложение может не перезапускаться днями: копия раз в сутки и после поиска.
+            self.dailyBackupIfNeeded()
             if !quiet || report.added > 0 || !report.failed.isEmpty {
                 if report.failed.isEmpty { self.lastMessage = report.summary } else { self.lastError = report.summary }
             }

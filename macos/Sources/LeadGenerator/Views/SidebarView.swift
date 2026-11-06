@@ -110,6 +110,6 @@ struct SidebarView: View {
             .fixedSize()
         }
         .scaledPadding(.horizontal, 12)
-        .scaledPadding(.vertical, 10)
+        .frame(height: 52 * look.scale)
     }
 }
