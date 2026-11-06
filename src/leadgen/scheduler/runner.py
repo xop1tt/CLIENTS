@@ -196,7 +196,7 @@ class Pipeline:
         if na is None:
             report.warnings.append("Notion не настроен — лиды сохранены только в локальном состоянии")
             return
-        if not self.s.live:
+        if not self.s.notion_live:
             pending = len(self.store.leads_pending_notion(1000))
             report.warnings.append(f"Notion: dry-run, к синхронизации ожидает {pending}")
             return

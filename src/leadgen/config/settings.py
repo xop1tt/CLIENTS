@@ -27,11 +27,17 @@ SECRET_NAMES = (
 class Settings:
     data: dict[str, Any]
     secrets: dict[str, str] = field(default_factory=dict)
-    mode: str = "dry-run"  # dry-run: ничего не отправляем наружу; live: боевой режим
+    # dry-run: ничего не отправляем наружу; live: боевой режим;
+    # notion-only: пишем только в Notion (проверочный запуск), Telegram и адаптеры — как в dry-run
+    mode: str = "dry-run"
 
     @property
     def live(self) -> bool:
         return self.mode == "live"
+
+    @property
+    def notion_live(self) -> bool:
+        return self.mode in ("live", "notion-only")
 
     def section(self, *path: str, default: Any = None) -> Any:
         node: Any = self.data
@@ -60,7 +66,7 @@ def load_settings(path: str | os.PathLike | None = None, env: dict[str, str] | N
     with open(path, encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     mode = (env.get("LEADGEN_MODE") or data.get("mode") or "dry-run").strip().lower()
-    if mode not in ("dry-run", "live"):
+    if mode not in ("dry-run", "live", "notion-only"):
         mode = "dry-run"
     secrets = {n: env.get(n, "").strip() for n in SECRET_NAMES}
     return Settings(data=data, secrets=secrets, mode=mode)

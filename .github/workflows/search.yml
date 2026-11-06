@@ -11,6 +11,11 @@ on:
         description: "Источники через запятую (пусто — все включённые)"
         required: false
         default: ""
+      mode:
+        description: "Режим запуска (live включается только переменной LEADGEN_MODE)"
+        type: choice
+        options: [default, dry-run, notion-only]
+        default: default
       force:
         description: "Игнорировать интервалы источников"
         type: boolean
@@ -71,7 +76,11 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           INPUT_SOURCES: ${{ inputs.sources }}
           INPUT_FORCE: ${{ inputs.force }}
+          INPUT_MODE: ${{ inputs.mode }}
         run: |
+          if [[ "$INPUT_MODE" == "dry-run" || "$INPUT_MODE" == "notion-only" ]]; then
+            export LEADGEN_MODE="$INPUT_MODE"
+          fi
           export LAST_COMMIT_AT="$(git log -1 --format=%cI)"
           args=()
           if [[ -n "$INPUT_SOURCES" ]]; then
