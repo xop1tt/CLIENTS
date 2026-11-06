@@ -161,22 +161,25 @@ tests/           70 тестов на фикстурах, сеть заблок�
 ### 3. Notion
 
 1. Откройте [notion.so/profile/integrations](https://www.notion.so/profile/integrations), нажмите
-   **New integration** (тип Internal) и скопируйте токен в `NOTION_TOKEN`.
-2. Создайте пустую страницу, например «Лиды», и через меню **⋯ → Connections** подключите к ней интеграцию.
-3. Создайте базу с нужными полями одной командой (локально, нужен Python 3.11+):
+   **New integration** (тип Internal) и скопируйте токен в секрет `NOTION_TOKEN`.
+2. Создайте базу с нужными полями. Проще всего попросить об этом Claude, если у него подключён Notion, или
+   создать вручную: список полей и их типов лежит в `SCHEMA` в `src/leadgen/storage/notion.py`
+   (названия должны совпадать точно). Команда для терминала (по желанию; нужен Python 3.11 или новее,
+   проверьте `python3 --version`). Сначала создайте пустую страницу, например «Лиды», и через **⋯ → Connections**
+   подключите к ней интеграцию: база создаётся внутри этой страницы, без доступа команда завершится ошибкой.
    ```bash
-   pip install -r requirements.txt
-   NOTION_TOKEN=... PYTHONPATH=src python -m leadgen notion-init --parent <ID страницы>
+   pip3 install -r requirements.txt
+   NOTION_TOKEN=токен PYTHONPATH=src python3 -m leadgen notion-init --parent ID_СТРАНИЦЫ
    ```
-   ID страницы — 32 символа в конце её адреса. Команда напечатает ID базы, это `NOTION_DATABASE_ID`.
-
-   Без Python поля можно создать вручную. Список полей и их типов — в `SCHEMA` в
-   `src/leadgen/storage/notion.py`.
+   `ID_СТРАНИЦЫ` — 32 символа в конце адреса страницы, к которой подключена интеграция. Команда создаёт базу
+   и печатает её ID. Одна команда на одну строку, угловые скобки в zsh/bash писать нельзя.
+3. Откройте базу, нажмите **⋯ → Connections** и подключите интеграцию. Без этого API ответит 404.
+4. ID базы (32 символа в её адресе) положите в секрет `NOTION_DATABASE_ID`. Это не секретное значение.
 
 ### 4. Ключ шифрования состояния
 
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 Сохраните результат в `STATE_ENCRYPTION_KEY`. Если ключ потерять или сменить, система восстановится из
@@ -291,8 +294,8 @@ Workflow запускается каждый час, а каждый источ�
 Основная копия — база Notion (её можно экспортировать средствами Notion). Локальная выгрузка:
 
 ```bash
-PYTHONPATH=src python -m leadgen export --format json --out backup/leads.json
-PYTHONPATH=src python -m leadgen export --format csv  --out backup/leads.csv
+PYTHONPATH=src python3 -m leadgen export --format json --out backup/leads.json
+PYTHONPATH=src python3 -m leadgen export --format csv  --out backup/leads.csv
 ```
 
 Папка `backup/` в `.gitignore`. **Не коммитьте выгрузки** в публичный репозиторий.
@@ -319,7 +322,7 @@ PYTHONPATH=src python -m leadgen export --format csv  --out backup/leads.csv
 | Симптом | Что делать |
 |---|---|
 | Ничего не приходит в Telegram | Проверьте `LEADGEN_MODE=live` и запустите Diagnose с `ping`. Убедитесь, что вы написали боту хотя бы одно сообщение |
-| `Notion: missing_properties` | В базе не хватает полей. Создайте базу через `notion-init` или добавьте поля вручную |
+| `Notion: missing_properties` | В базе не хватает полей. Создайте поля вручную или командой `notion-init` |
 | Notion 401/404 | Интеграция не подключена к странице/базе (**⋯ → Connections**) |
 | Источник `fl_ru` падает с 403/таймаутом | Площадка не пускает IP GitHub. Временно выключите источник, обойти это нельзя |
 | `telegram_channels: нет публичного превью` | У канала выключено веб-превью или неверное имя |
@@ -331,10 +334,10 @@ PYTHONPATH=src python -m leadgen export --format csv  --out backup/leads.csv
 Локальный запуск:
 
 ```bash
-pip install -r requirements-dev.txt
-python -m pytest                                  # 70 тестов, без сети
-PYTHONPATH=src python -m leadgen diagnose
-PYTHONPATH=src python -m leadgen run --sources fl_ru --force   # dry-run по умолчанию
+pip3 install -r requirements-dev.txt
+python3 -m pytest                                  # 70 тестов, без сети
+PYTHONPATH=src python3 -m leadgen diagnose
+PYTHONPATH=src python3 -m leadgen run --sources fl_ru --force   # dry-run по умолчанию
 ```
 
 ## Ограничения и что дальше
