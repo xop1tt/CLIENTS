@@ -22,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         themeObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.updateDockIcon() } }
+        UpdateController.shared.startAutomaticChecks()
+        // Отчёт о прошлом вылете предлагается, когда окно уже на экране.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { ReportController.shared.checkAfterLaunch() }
     }
 
     /// Значок в Dock следует теме macOS: светлый (из AppIcon.icns) или тёмный (AppIcon-Dark.png).
@@ -62,6 +65,18 @@ struct LeadGeneratorApp: App {
         .defaultSize(width: 1440, height: 900)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("Проверить обновления…") { UpdateController.shared.check(manual: true) }
+            }
+            CommandGroup(replacing: .help) {
+                Button("Сообщить о проблеме…") { ReportController.shared.compose(crash: nil) }
+                Button("Отправить отчёт о последнем сбое…") {
+                    ReportController.shared.refresh()
+                    ReportController.shared.compose(crash: ReportController.shared.crashes.first)
+                }
+                Divider()
+                Link("Страница проекта на GitHub", destination: Updates.releasesPage.deletingLastPathComponent())
+            }
             // Команды не зависят от часто меняющегося состояния (выделение, ход поиска):
             // иначе SwiftUI перестраивает главное меню на каждое изменение, и при частых
             // обновлениях приложение зависало. Действия сами проверяют, можно ли их выполнить.
