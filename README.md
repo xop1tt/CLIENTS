@@ -5,7 +5,7 @@
   <img src="macos/Resources/AppIcon-1024.png" alt="Иконка Lead Generator" width="128" height="128">
 </picture>
 
-# Lead Generator
+# Customers
 
 **Бесплатное приложение для macOS, которое само находит заказчиков на разработку**<br>
 сайты · Telegram-боты · приложения · автоматизация · CRM · доработки
