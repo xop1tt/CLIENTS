@@ -97,7 +97,7 @@ def cmd_diagnose(args, settings) -> int:
     store = Store(args.db) if Path(args.db).exists() else Store(":memory:")
     pipe = Pipeline(settings, store)
     print(f"Режим: {settings.mode}")
-    print("Секреты:", ", ".join(f"{k}={'есть' if v else 'нет'}" for k, v in settings.secrets.items()))
+    print("Секреты: скрыты (не выводятся в диагностике)")
     print("\nИсточники:")
     for src in pipe.build_sources(list(settings.section("sources").keys())):
         st = store.source_state(src.name)
