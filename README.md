@@ -1,9 +1,6 @@
 <div align="center">
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="macos/Resources/AppIcon-Dark-1024.png">
-  <img src="macos/Resources/AppIcon-1024.png" alt="Иконка Lead Generator" width="128" height="128">
-</picture>
+<img src="macos/Resources/AppIcon-1024.png" alt="Иконка Customers" width="128" height="128">
 
 # Customers
 
@@ -28,7 +25,7 @@
 
 ---
 
-Lead Generator просматривает открытые источники: RSS-ленты бирж (FL.ru и любые другие), публичные Telegram-каналы,
+Customers просматривает открытые источники: RSS-ленты бирж (FL.ru и любые другие), публичные Telegram-каналы,
 сообщества VK и организации из OpenStreetMap. Он отбирает настоящие заказы, оценивает каждый по понятным правилам и
 складывает в удобную таблицу на вашем Mac. **Всё бесплатно навсегда**: без подписок, пробных периодов, платных API и AI-сервисов.
 
@@ -50,7 +47,7 @@ Lead Generator просматривает открытые источники: R
 ## 🚀 Быстрый старт
 
 1. Скачайте `Customers-vX.Y.Z-macOS.dmg` со страницы [последнего релиза](https://github.com/xop1tt/CLIENTS/releases/latest).
-2. Откройте dmg и перетащите **Lead Generator** в «Программы».
+2. Откройте dmg и перетащите **Customers** в «Программы».
 3. При первом запуске: правый клик по приложению → **Открыть** → **Открыть**
    (сборка без платной подписи Apple, macOS спросит один раз).
 4. Создайте учётную запись, добавьте в «Источниках» свои Telegram-каналы, RSS-ленты или город и нажмите **«Найти лиды»**.
@@ -100,7 +97,7 @@ docs/         облако и аудит источников
 
 ## 📄 Лицензия
 
-Lead Generator распространяется по лицензии **Personal & Internal Business Use License (PIBUL) 1.0**: его можно
+Customers распространяется по лицензии **Personal & Internal Business Use License (PIBUL) 1.0**: его можно
 бесплатно использовать для себя и внутри своей организации. Продажа, коммерческое распространение и публикация копий
 без письменного разрешения автора запрещены. Полный текст: [LICENSE](LICENSE).
 

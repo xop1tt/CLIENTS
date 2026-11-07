@@ -14,7 +14,7 @@ struct ReportSettingsView: View {
                     LabeledContent("Последний отчёт", value: "\(last.kind), \(last.date.fullRu)")
                     LabeledContent("Всего на этом Mac", value: "\(reports.crashes.count)")
                 } else {
-                    Text("Отчётов о вылетах и зависаниях Lead Generator на этом Mac нет.")
+                    Text("Отчётов о вылетах и зависаниях Customers на этом Mac нет.")
                         .foregroundStyle(.secondary)
                 }
                 HStack {

@@ -191,7 +191,7 @@ struct AppCommands: Commands {
 
         // MARK: Справка
         CommandGroup(replacing: .help) {
-            Link("Справка Lead Generator (Wiki)", destination: Updates.wikiPage)
+            Link("Справка Customers (Wiki)", destination: Updates.wikiPage)
             Link("Что нового в этой версии", destination: MenuActions.releaseNotesPage)
             Link("Все выпуски", destination: Updates.releasesPage)
             Divider()

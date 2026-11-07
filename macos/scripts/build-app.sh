@@ -1,10 +1,10 @@
 #!/bin/bash
-# Сборка Lead Generator.app из исходников (нужны Xcode или Command Line Tools, macOS 14+).
+# Сборка Customers.app из исходников (нужны Xcode или Command Line Tools, macOS 14+).
 # Использование: ./scripts/build-app.sh [папка_назначения]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 OUT="${1:-build}"
-VERSION="${LEADGEN_VERSION:-1.0.8}"
+VERSION="${LEADGEN_VERSION:-1.0.9}"
 
 ARCH_FLAGS=()
 if [[ "${UNIVERSAL:-0}" == "1" ]]; then ARCH_FLAGS=(--arch arm64 --arch x86_64); fi
@@ -12,7 +12,7 @@ if [[ "${UNIVERSAL:-0}" == "1" ]]; then ARCH_FLAGS=(--arch arm64 --arch x86_64);
 swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}
 BIN="$(swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)/LeadGenerator"
 
-APP="$OUT/Lead Generator.app"
+APP="$OUT/Customers.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LeadGenerator"
@@ -32,8 +32,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key><string>Lead Generator</string>
-  <key>CFBundleDisplayName</key><string>Lead Generator</string>
+  <key>CFBundleName</key><string>Customers</string>
+  <key>CFBundleDisplayName</key><string>Customers</string>
   <key>CFBundleIdentifier</key><string>local.leadgenerator.app</string>
   <key>CFBundleExecutable</key><string>LeadGenerator</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -54,8 +54,9 @@ ${CLOUD_KEYS}
 </dict>
 </plist>
 PLIST
-# Иконка: из Resources/AppIcon-1024.png (исходник Resources/AppIcon.svg) собирается AppIcon.icns,
-# тёмная версия — Resources/AppIcon-Dark-1024.png (исходник AppIcon-Dark.svg).
+# Иконка: одна, тёмная. Из Resources/AppIcon-1024.png (рисует scripts/make-icon.py, исходник AppIcon.svg)
+# собирается AppIcon.icns. Приложение не подменяет значок в Dock: при выходе Dock показывает значок
+# из пакета, поэтому он должен быть таким же, как во время работы.
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
 for s in 16 32 128 256 512; do
@@ -63,8 +64,6 @@ for s in 16 32 128 256 512; do
   sips -z $((s*2)) $((s*2)) Resources/AppIcon-1024.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
-# Тёмный вариант: приложение ставит его в Dock, когда в macOS включена тёмная тема.
-sips -z 512 512 Resources/AppIcon-Dark-1024.png --out "$APP/Contents/Resources/AppIcon-Dark.png" >/dev/null
 
 # Подпись. Платного Apple Developer ID нет, поэтому при первом запуске скачанной сборки
 # macOS попросит подтверждение: правый клик по приложению → «Открыть».

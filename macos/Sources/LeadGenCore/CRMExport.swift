@@ -273,7 +273,7 @@ public struct Bitrix24Destination: CRMDestination {
         var f: [String: CRMJSON] = [
             "TITLE": .string(String(d.title.prefix(250))),
             "SOURCE_ID": .string("OTHER"),
-            "SOURCE_DESCRIPTION": .string("Lead Generator: \(SourceCatalog.title(d.source))"),
+            "SOURCE_DESCRIPTION": .string("Customers: \(SourceCatalog.title(d.source))"),
             "COMMENTS": .string(CRMExporter.comment(for: item)),
             "OPENED": .string("Y"),
             // Связь с исходной записью: по ней видно, откуда пришёл лид.

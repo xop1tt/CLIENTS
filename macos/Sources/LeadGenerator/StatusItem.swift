@@ -15,7 +15,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func setVisible(_ visible: Bool) {
         if visible, item == nil {
             let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-            item.button?.image = NSImage(systemSymbolName: "megaphone", accessibilityDescription: "Lead Generator")
+            item.button?.image = NSImage(systemSymbolName: "megaphone", accessibilityDescription: "Customers")
             item.button?.image?.isTemplate = true
             let menu = NSMenu()
             menu.delegate = self
@@ -51,9 +51,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(info)
         }
         menu.addItem(.separator())
-        menu.addItem(action("Открыть Lead Generator", #selector(openWindow)))
+        menu.addItem(action("Открыть Customers", #selector(openWindow)))
         menu.addItem(.separator())
-        menu.addItem(action("Завершить Lead Generator", #selector(quit)))
+        menu.addItem(action("Завершить Customers", #selector(quit)))
     }
 
     private func action(_ title: String, _ selector: Selector) -> NSMenuItem {
