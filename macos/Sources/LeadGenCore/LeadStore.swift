@@ -446,7 +446,7 @@ public final class LeadStore: @unchecked Sendable {
         let probe = try SQLiteDB(path: url.path, readOnly: true)
         let valid = try probe.tableExists("leads")
         probe.close()
-        guard valid else { throw SQLiteError(message: "это не резервная копия Lead Generator") }
+        guard valid else { throw SQLiteError(message: "это не резервная копия Customers") }
         let current = URL(fileURLWithPath: path)
         guard url.standardizedFileURL.resolvingSymlinksInPath() != current.standardizedFileURL.resolvingSymlinksInPath() else {
             throw SQLiteError(message: "это текущая база, восстанавливать из неё нечего")

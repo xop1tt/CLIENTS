@@ -1,4 +1,4 @@
-# Lead Generator для macOS
+# Customers для macOS
 
 Нативное приложение на SwiftUI (macOS 14 Sonoma и новее). Ищет потенциальных заказчиков прямо на вашем Mac:
 без GitHub Actions, токенов GitHub и платных сервисов. Лиды, настройки и учётные записи хранятся только на этом Mac.
@@ -6,7 +6,7 @@
 ## Как это устроено
 
 ```
-Lead Generator.app
+Customers.app
   ├─ Вход: локальная учётная запись (имя пользователя + пароль)
   ├─ Поиск (модуль LeadSearch, без интерфейса)
   │    RSS-ленты · Telegram-каналы · VK-сообщества · OpenStreetMap + проверка сайтов
@@ -119,15 +119,15 @@ Lead Generator.app
     «Сообщить о проблеме…».
   - **Обновления:** с выбранной частотой (от раза в час до раза в неделю, по умолчанию раз в сутки) проверяется последний релиз через публичный API GitHub (без токена).
     Если вышла новая версия, приложение покажет, что в ней нового, и по согласию скачает dmg, сверит
-    SHA-256, заменит себя и перезапустится. Проверку можно выключить; вручную: «Lead Generator» →
+    SHA-256, заменит себя и перезапустится. Проверку можно выключить; вручную: «Customers» →
     «Проверить обновления…». Если папка с приложением недоступна для записи, откроется dmg для ручной установки.
 
 ## Установка
 
 ### Вариант 1. Установщик из релиза
 
-1. Откройте [Releases](https://github.com/xop1tt/CLIENTS/releases/latest) и скачайте `Lead-Generator-vX.Y.Z-macOS.dmg`.
-2. Откройте dmg и перетащите «Lead Generator» на ярлык «Программы».
+1. Откройте [Releases](https://github.com/xop1tt/CLIENTS/releases/latest) и скачайте `Customers-vX.Y.Z-macOS.dmg`.
+2. Откройте dmg и перетащите «Customers» на ярлык «Программы».
 3. Первый запуск: правый клик по приложению → **Открыть** → **Открыть**. Сборка подписана локально
    (ad-hoc), без платного Apple Developer ID, поэтому macOS спрашивает подтверждение один раз.
 4. Создайте учётную запись и нажмите «Найти лиды».
@@ -135,7 +135,7 @@ Lead Generator.app
 Начиная с 1.0.5 следующие версии ставятся из самого приложения (см. «Обновления»).
 Контрольная сумма берётся из того же релиза: она защищает от повреждённой загрузки, но не заменяет подпись Apple.
 
-Свежая сборка из любой ветки есть в **Actions → macOS app → Artifacts** (`Lead-Generator-macOS`, внутри dmg).
+Свежая сборка из любой ветки есть в **Actions → macOS app → Artifacts** (`Customers-macOS`, внутри dmg).
 
 ### Вариант 2. Сборка из исходников
 
@@ -144,9 +144,9 @@ Lead Generator.app
 ```bash
 cd macos
 swift test                     # тесты: поиск, оценка, база, учётные записи
-./scripts/build-app.sh         # соберёт build/Lead Generator.app
-./scripts/make-dmg.sh build/Lead-Generator.dmg   # по желанию: установщик
-open "build/Lead Generator.app"
+./scripts/build-app.sh         # соберёт build/Customers.app
+./scripts/make-dmg.sh build/Customers.dmg   # по желанию: установщик
+open "build/Customers.app"
 ```
 
 Структура:
@@ -158,9 +158,8 @@ Sources/LeadGenerator/ приложение SwiftUI
 Tests/                 тесты на фикстурах, без сети
 ```
 
-Иконка: исходники `Resources/AppIcon.svg` и `AppIcon-Dark.svg`, растры `AppIcon-1024.png` (из него при сборке
-получается `AppIcon.icns`) и `AppIcon-Dark-1024.png` (тёмная версия на почти чёрном фоне, приложение ставит её
-в Dock при тёмной теме macOS).
+Иконка: одна, тёмная. Исходник `Resources/AppIcon.svg`, растр `AppIcon-1024.png` строит `scripts/make-icon.py`,
+при сборке из него получается `AppIcon.icns`. Подмены значка в Dock нет.
 
 Для разработки: `open Package.swift` откроет проект в Xcode, схема `LeadGenerator`.
 

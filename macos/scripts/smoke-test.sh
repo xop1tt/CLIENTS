@@ -2,7 +2,7 @@
 # Запускает собранное приложение и проверяет, что оно не падает при открытии окна.
 # Ловит ошибки, которые не видны в unit-тестах (например, отсутствующие значения окружения SwiftUI).
 set -euo pipefail
-APP="${1:-build/Lead Generator.app}"
+APP="${1:-build/Customers.app}"
 BIN="$APP/Contents/MacOS/LeadGenerator"
 SECONDS_ALIVE="${SMOKE_SECONDS:-15}"
 

@@ -117,7 +117,7 @@ final class UpdateController {
     /// Ручная проверка показывает результат всегда, автоматическая — только если есть новая версия.
     func check(manual: Bool) {
         guard let current, canUpdate else {
-            if manual { alert("Обновление недоступно", "Приложение запущено не из «Lead Generator.app», обновлять нечего.") }
+            if manual { alert("Обновление недоступно", "Приложение запущено не из «Customers.app», обновлять нечего.") }
             return
         }
         switch phase {
@@ -132,7 +132,7 @@ final class UpdateController {
                 defaults.set(lastCheck, forKey: Self.lastKey)
                 guard let update = Updates.update(from: release, current: current) else {
                     phase = .upToDate
-                    if manual { alert("Установлена последняя версия", "Lead Generator \(current) — самая новая версия.") }
+                    if manual { alert("Установлена последняя версия", "Customers \(current) — самая новая версия.") }
                     return
                 }
                 phase = .available(update.version.description)
@@ -214,7 +214,7 @@ final class UpdateController {
 
         guard let appName = try FileManager.default.contentsOfDirectory(atPath: mount.path).first(where: { $0.hasSuffix(".app") })
         else { throw UpdateError.wrongApp("приложение не найдено в образе") }
-        let staged = work.appendingPathComponent("Lead Generator.app")
+        let staged = work.appendingPathComponent("Customers.app")
         try Self.run("/usr/bin/ditto", [mount.appendingPathComponent(appName).path, staged.path])
 
         let info = NSDictionary(contentsOf: staged.appendingPathComponent("Contents/Info.plist")) as? [String: Any] ?? [:]
@@ -231,6 +231,9 @@ final class UpdateController {
     private func relaunch(replacingWith staged: URL) throws {
         let target = Bundle.main.bundleURL
         let parent = target.deletingLastPathComponent()
+        // Приложение раньше называлось «Lead Generator.app»: после обновления оно ставится как «Customers.app»,
+        // а старый пакет удаляется.
+        let renamed = parent.appendingPathComponent("Customers.app")
         guard FileManager.default.isWritableFile(atPath: parent.path) else {
             // Нет прав на папку с приложением: открываем образ, пользователь перетащит сам.
             NSWorkspace.shared.open(staged.deletingLastPathComponent().appendingPathComponent(pending?.dmg.name ?? ""))
@@ -240,15 +243,19 @@ final class UpdateController {
         // При ошибке возвращает прежнюю версию.
         let script = """
         #!/bin/sh
-        PID="$1"; NEW="$2"; TARGET="$3"
+        PID="$1"; NEW="$2"; OLD="$3"; TARGET="$4"
         while kill -0 "$PID" 2>/dev/null; do sleep 0.3; done
         rm -rf "$TARGET.update" "$TARGET.previous"
         /usr/bin/ditto "$NEW" "$TARGET.update" || exit 1
-        mv "$TARGET" "$TARGET.previous" || exit 1
+        mv "$OLD" "$OLD.previous" || exit 1
+        if [ -e "$TARGET" ]; then mv "$TARGET" "$TARGET.replaced"; fi
         if mv "$TARGET.update" "$TARGET"; then
-          rm -rf "$TARGET.previous"
+          rm -rf "$OLD.previous" "$TARGET.replaced"
         else
-          mv "$TARGET.previous" "$TARGET"
+          rm -rf "$TARGET"
+          mv "$OLD.previous" "$OLD"
+          if [ -e "$TARGET.replaced" ]; then mv "$TARGET.replaced" "$TARGET"; fi
+          TARGET="$OLD"
         fi
         /usr/bin/xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null
         /usr/bin/open "$TARGET"
@@ -257,7 +264,7 @@ final class UpdateController {
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = [scriptURL.path, String(ProcessInfo.processInfo.processIdentifier), staged.path, target.path]
+        p.arguments = [scriptURL.path, String(ProcessInfo.processInfo.processIdentifier), staged.path, target.path, renamed.path]
         try p.run()
         SessionModel.shared.current?.shutdown()
         NSApp.terminate(nil)

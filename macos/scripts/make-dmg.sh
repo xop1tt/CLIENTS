@@ -4,14 +4,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DMG="$1"
-APP="${2:-build/Lead Generator.app}"
-STAGE="$(mktemp -d)/Lead Generator"
+APP="${2:-build/Customers.app}"
+STAGE="$(mktemp -d)/Customers"
 mkdir -p "$STAGE"
-ditto "$APP" "$STAGE/Lead Generator.app"
+ditto "$APP" "$STAGE/Customers.app"
 ln -s /Applications "$STAGE/Applications"
 cp "$APP/Contents/Resources/AppIcon.icns" "$STAGE/.VolumeIcon.icns"
 rm -f "$DMG"
-hdiutil create -volname "Lead Generator" -srcfolder "$STAGE" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$DMG"
+hdiutil create -volname "Customers" -srcfolder "$STAGE" -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov "$DMG"
 # Значок тома: флаг «custom icon» на корне образа (SetFile есть в Command Line Tools).
 if command -v SetFile >/dev/null; then
   RW="$(mktemp -d)/rw.dmg"
