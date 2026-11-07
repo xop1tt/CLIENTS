@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var themeObserver: NSObjectProtocol?
+    private var iconObservers: [NSObjectProtocol] = []
 
     private let statusItem = StatusItemController()
     private var defaultsObserver: NSObjectProtocol?
@@ -22,9 +23,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         themeObserver = DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.updateDockIcon() } }
+        // Dock возвращает значок из бандла (светлый), когда закрыто последнее окно, приложение
+        // скрывается или теряет фокус. Тёмный значок выставляем заново после каждого такого события.
+        let center = NotificationCenter.default
+        for name in [NSWindow.willCloseNotification, NSApplication.didResignActiveNotification,
+                     NSApplication.didBecomeActiveNotification, NSApplication.didHideNotification,
+                     NSApplication.didUnhideNotification] {
+            iconObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshDockIconSoon() }
+            })
+        }
         UpdateController.shared.startAutomaticChecks()
         // Отчёт о прошлом вылете предлагается, когда окно уже на экране.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { ReportController.shared.checkAfterLaunch() }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        refreshDockIconSoon()
+        return true
+    }
+
+    /// Сразу и ещё раз чуть позже: Dock может перечитать значок уже после самого события.
+    private func refreshDockIconSoon() {
+        updateDockIcon()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.updateDockIcon() }
     }
 
     /// Значок в Dock следует теме macOS: светлый (из AppIcon.icns) или тёмный (AppIcon-Dark.png).
