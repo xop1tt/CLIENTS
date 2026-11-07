@@ -130,12 +130,17 @@ public final class SQLiteDB {
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
             throw SQLiteError(message: "\(errorMessage) — \(sql.prefix(80))")
         }
+        let hasCipher = Self.cipherVersion(handle) != nil
         for (i, v) in args.enumerated() {
             let idx = Int32(i + 1)
             switch v {
             case .int(let x): sqlite3_bind_int64(stmt, idx, x)
             case .double(let x): sqlite3_bind_double(stmt, idx, x)
-            case .text(let x): sqlite3_bind_text(stmt, idx, x, -1, SQLITE_TRANSIENT)
+            case .text(let x):
+                guard hasCipher else {
+                    throw SQLiteError(message: "Отказ в записи текста: SQLCipher не активен, запись в открытом виде запрещена")
+                }
+                sqlite3_bind_text(stmt, idx, x, -1, SQLITE_TRANSIENT)
             case .null: sqlite3_bind_null(stmt, idx)
             }
         }
