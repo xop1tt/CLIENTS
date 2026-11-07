@@ -4,9 +4,6 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var themeObserver: NSObjectProtocol?
-    private var iconObservers: [NSObjectProtocol] = []
-
     private let statusItem = StatusItemController()
     private var defaultsObserver: NSObjectProtocol?
 
@@ -14,51 +11,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Запуск из `swift run` / без .app-обёртки: показать окно и значок в Dock.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        updateDockIcon()
         statusItem.setVisible(BackgroundMode.enabled)
         // Переключатель «Продолжать работу в фоне» хранится в UserDefaults.
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.statusItem.setVisible(BackgroundMode.enabled) } }
-        themeObserver = DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.updateDockIcon() } }
-        // Dock возвращает значок из бандла (светлый), когда закрыто последнее окно, приложение
-        // скрывается или теряет фокус. Тёмный значок выставляем заново после каждого такого события.
-        let center = NotificationCenter.default
-        for name in [NSWindow.willCloseNotification, NSApplication.didResignActiveNotification,
-                     NSApplication.didBecomeActiveNotification, NSApplication.didHideNotification,
-                     NSApplication.didUnhideNotification] {
-            iconObservers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshDockIconSoon() }
-            })
-        }
         UpdateController.shared.startAutomaticChecks()
         // Отчёт о прошлом вылете предлагается, когда окно уже на экране.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { ReportController.shared.checkAfterLaunch() }
     }
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        refreshDockIconSoon()
-        return true
-    }
-
-    /// Сразу и ещё раз чуть позже: Dock может перечитать значок уже после самого события.
-    private func refreshDockIconSoon() {
-        updateDockIcon()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in self?.updateDockIcon() }
-    }
-
-    /// Значок в Dock следует теме macOS: светлый (из AppIcon.icns) или тёмный (AppIcon-Dark.png).
-    private func updateDockIcon() {
-        let systemDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
-        if systemDark, let url = Bundle.main.url(forResource: "AppIcon-Dark", withExtension: "png"),
-           let image = NSImage(contentsOf: url) {
-            NSApp.applicationIconImage = image
-        } else {
-            NSApp.applicationIconImage = nil  // вернуть значок из бандла
-        }
-    }
+    // Значок приложения один и тёмный, он берётся из пакета (AppIcon.icns). Значок в Dock не
+    // подменяется (NSApp.applicationIconImage): при выходе Dock показывает значок из пакета, и подмена
+    // «слетала» на светлый. Это проверяет IconTests.
 
     /// Работа в фоне: при закрытом окне приложение остаётся в строке меню и ищет по расписанию.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !BackgroundMode.enabled }
@@ -76,7 +41,7 @@ struct LeadGeneratorApp: App {
     @State private var look = AppearanceSettings.shared
 
     var body: some Scene {
-        WindowGroup("Lead Generator", id: "main") {
+        WindowGroup("Customers", id: "main") {
             SessionRoot()
                 .environment(\.session, session)
                 .modifier(LookRoot(look: look))

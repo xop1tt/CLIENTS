@@ -16,7 +16,7 @@ struct AuthView: View {
                     VStack(spacing: 10) {
                         Image(nsImage: NSApp.applicationIconImage ?? NSImage())
                             .resizable().frame(width: 84, height: 84)
-                        Text("Lead Generator").font(.system(size: 26, weight: .bold))
+                        Text("Customers").font(.system(size: 26, weight: .bold))
                         Text(subtitle).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }
                     switch session.stage {

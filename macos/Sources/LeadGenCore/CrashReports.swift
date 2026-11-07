@@ -53,7 +53,7 @@ public enum CrashReports {
     public static func isOurs(_ fileName: String) -> Bool {
         let ext = (fileName as NSString).pathExtension.lowercased()
         guard extensions.contains(ext) else { return false }
-        return fileName.hasPrefix("LeadGenerator") || fileName.hasPrefix("Lead Generator")
+        return fileName.hasPrefix("LeadGenerator") || fileName.hasPrefix("Lead Generator") || fileName.hasPrefix("Customers")
     }
 
     /// Отчёты этого приложения, новые сначала.

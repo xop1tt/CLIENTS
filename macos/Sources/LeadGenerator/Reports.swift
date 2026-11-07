@@ -57,7 +57,7 @@ final class ReportController {
         guard offerAfterCrash, newest.date > lastSeen else { return }
 
         let a = NSAlert()
-        a.messageText = "Lead Generator в прошлый раз завершился аварийно"
+        a.messageText = "Customers в прошлый раз завершился аварийно"
         a.informativeText = "macOS сохранила отчёт: \(newest.kind.lowercased()), \(newest.date.fullRu). Можно отправить его разработчику, чтобы ошибку исправили. Перед отправкой вы увидите весь текст."
         a.addButton(withTitle: "Посмотреть и отправить…")
         a.addButton(withTitle: "Не сейчас")
@@ -87,7 +87,7 @@ final class ReportController {
 
 
         ### Сборка
-        - Lead Generator \(version) (\(build))
+        - Customers \(version) (\(build))
         - \(ProcessInfo.processInfo.operatingSystemVersionString), \(arch)
         """
         if let crash, let text = try? String(contentsOf: crash.url, encoding: .utf8) {
@@ -128,8 +128,8 @@ final class ReportController {
         switch response {
         case .alertFirstButtonReturn:
             copy(body)
-            let title = crash.map { "\($0.kind) Lead Generator \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")" }
-                ?? "Проблема в Lead Generator"
+            let title = crash.map { "\($0.kind) Customers \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")" }
+                ?? "Проблема в Customers"
             NSWorkspace.shared.open(CrashReports.issueURL(title: title, body: body))
         case .alertSecondButtonReturn:
             copy(body)

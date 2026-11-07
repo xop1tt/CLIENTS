@@ -141,7 +141,7 @@ public enum Updates {
         let dmgs = release.assets.filter { $0.name.lowercased().hasSuffix(".dmg") }
         guard let dmg = dmgs.first(where: { $0.name.contains("macOS") }) ?? dmgs.first else { return nil }
         let sum = release.assets.first { $0.name == dmg.name + ".sha256" }
-        return AvailableUpdate(version: version, title: release.name ?? "Lead Generator \(version)",
+        return AvailableUpdate(version: version, title: release.name ?? "Customers \(version)",
                                notes: release.body ?? "", page: release.htmlURL, dmg: dmg, checksumFile: sum)
     }
 
