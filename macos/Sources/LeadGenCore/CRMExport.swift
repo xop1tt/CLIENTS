@@ -23,9 +23,9 @@ public enum CRMKind: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Значение JSON без `Any`: собирается в коде, проверяется в тестах, кодируется JSONEncoder.
-public enum JSONValue: Encodable, Equatable, Sendable {
+public enum CRMJSON: Encodable, Equatable, Sendable {
     case string(String), number(Double), bool(Bool), null
-    case array([JSONValue]), object([String: JSONValue])
+    case array([CRMJSON]), object([String: CRMJSON])
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.singleValueContainer()
@@ -39,7 +39,7 @@ public enum JSONValue: Encodable, Equatable, Sendable {
         }
     }
 
-    public subscript(key: String) -> JSONValue? {
+    public subscript(key: String) -> CRMJSON? {
         if case .object(let o) = self { return o[key] }
         return nil
     }
@@ -268,9 +268,9 @@ public struct Bitrix24Destination: CRMDestination {
     }
 
     /// Поля лида для `crm.lead.add`.
-    public static func fields(for item: LeadItem) -> JSONValue {
+    public static func fields(for item: LeadItem) -> CRMJSON {
         let d = item.data
-        var f: [String: JSONValue] = [
+        var f: [String: CRMJSON] = [
             "TITLE": .string(String(d.title.prefix(250))),
             "SOURCE_ID": .string("OTHER"),
             "SOURCE_DESCRIPTION": .string("Lead Generator: \(SourceCatalog.title(d.source))"),
@@ -284,10 +284,10 @@ public struct Bitrix24Destination: CRMDestination {
             f["COMPANY_TITLE"] = .string(name)
         }
         if !d.phones.isEmpty {
-            f["PHONE"] = .array(d.phones.map { JSONValue.object(["VALUE": .string($0), "VALUE_TYPE": .string("WORK")]) })
+            f["PHONE"] = .array(d.phones.map { CRMJSON.object(["VALUE": .string($0), "VALUE_TYPE": .string("WORK")]) })
         }
         if !d.emails.isEmpty {
-            f["EMAIL"] = .array(d.emails.map { JSONValue.object(["VALUE": .string($0), "VALUE_TYPE": .string("WORK")]) })
+            f["EMAIL"] = .array(d.emails.map { CRMJSON.object(["VALUE": .string($0), "VALUE_TYPE": .string("WORK")]) })
         }
         if let w = d.website?.nilIfEmpty {
             f["WEB"] = .array([.object(["VALUE": .string(w), "VALUE_TYPE": .string("WORK")])])
@@ -301,7 +301,7 @@ public struct Bitrix24Destination: CRMDestination {
         return .object(f)
     }
 
-    public func request(method: String, body: JSONValue) throws -> URLRequest {
+    public func request(method: String, body: CRMJSON) throws -> URLRequest {
         var r = URLRequest(url: base.appendingPathComponent("\(method).json"), timeoutInterval: 30)
         r.httpMethod = "POST"
         r.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -341,7 +341,7 @@ public struct Bitrix24Destination: CRMDestination {
     }
 
     public func send(_ item: LeadItem, session: URLSession) async throws -> String {
-        let body: JSONValue = .object(["fields": Self.fields(for: item),
+        let body: CRMJSON = .object(["fields": Self.fields(for: item),
                                        "params": .object(["REGISTER_SONET_EVENT": .string("N")])])
         let (data, code) = try await CRMExporter.perform(try request(method: "crm.lead.add", body: body), session: session)
         let result = try Self.parse(data, status: code)
@@ -434,7 +434,7 @@ public struct NotionDestination: CRMDestination {
         return [a[0..<8], a[8..<12], a[12..<16], a[16..<20], a[20..<32]].map { String($0) }.joined(separator: "-")
     }
 
-    static func request(_ path: String, token: String, method: String = "GET", body: JSONValue? = nil) throws -> URLRequest {
+    static func request(_ path: String, token: String, method: String = "GET", body: CRMJSON? = nil) throws -> URLRequest {
         var r = URLRequest(url: api.appendingPathComponent(path), timeoutInterval: 30)
         r.httpMethod = method
         r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -526,17 +526,17 @@ public struct NotionDestination: CRMDestination {
     }
 
     /// Значение свойства Notion из поля лида. `nil` — пропустить (пустое или неподходящее).
-    public static func value(_ field: ExportField, of item: LeadItem, type: String) -> JSONValue? {
+    public static func value(_ field: ExportField, of item: LeadItem, type: String) -> CRMJSON? {
         let raw: String
         switch field {
         case .phone: raw = item.data.phones.first ?? ""
         case .emails: raw = item.data.emails.first ?? ""
         default: raw = field.value(item)
         }
-        if type == "checkbox" { return .bool(field == .favorite ? item.favorite : !raw.isEmpty) }
+        if type == "checkbox" { return .object(["checkbox": .bool(field == .favorite ? item.favorite : !raw.isEmpty)]) }
         let text = String(raw.prefix(2000))
         guard !text.isEmpty else { return nil }
-        func rich(_ s: String) -> JSONValue { .array([.object(["text": .object(["content": .string(s)])])]) }
+        func rich(_ s: String) -> CRMJSON { .array([.object(["text": .object(["content": .string(s)])])]) }
         switch type {
         case "title": return .object(["title": rich(text)])
         case "rich_text": return .object(["rich_text": rich(field == .phone ? item.data.phones.joined(separator: ", ") : field == .emails ? item.data.emails.joined(separator: ", ") : text)])
@@ -560,7 +560,7 @@ public struct NotionDestination: CRMDestination {
             let tags = text.split(whereSeparator: { $0 == "," || $0 == ";" })
                 .map { String($0.trimmingCharacters(in: .whitespaces).prefix(100)) }.filter { !$0.isEmpty }
             guard !tags.isEmpty else { return nil }
-            return .object(["multi_select": .array(tags.prefix(20).map { JSONValue.object(["name": .string($0)]) })])
+            return .object(["multi_select": .array(tags.prefix(20).map { CRMJSON.object(["name": .string($0)]) })])
         case "date":
             let date: Date? = field == .discoveredAt ? item.discoveredAt : ISODate.parse(text)
             guard let start = ISODate.format(date) else { return nil }
@@ -569,8 +569,8 @@ public struct NotionDestination: CRMDestination {
         }
     }
 
-    public func pageBody(for item: LeadItem) -> JSONValue {
-        var props: [String: JSONValue] = [:]
+    public func pageBody(for item: LeadItem) -> CRMJSON {
+        var props: [String: CRMJSON] = [:]
         for p in properties {
             guard let field = mapping[p.name], let v = Self.value(field, of: item, type: p.type) else { continue }
             props[p.name] = v
@@ -580,7 +580,7 @@ public struct NotionDestination: CRMDestination {
         var chunks: [String] = []
         var rest = Substring(text)
         while !rest.isEmpty && chunks.count < 20 { chunks.append(String(rest.prefix(2000))); rest = rest.dropFirst(2000) }
-        let children: [JSONValue] = chunks.map {
+        let children: [CRMJSON] = chunks.map {
             .object(["object": .string("block"), "type": .string("paragraph"),
                      "paragraph": .object(["rich_text": .array([.object(["text": .object(["content": .string($0)])])])])])
         }
@@ -618,11 +618,11 @@ public struct WebhookDestination: CRMDestination {
     }
 
     /// Тело запроса: один лид, все поля экспорта, плюс телефоны и email списками.
-    public static func payload(for item: LeadItem) -> JSONValue {
-        var lead: [String: JSONValue] = [:]
+    public static func payload(for item: LeadItem) -> CRMJSON {
+        var lead: [String: CRMJSON] = [:]
         for f in ExportField.allCases { lead[f.rawValue] = .string(f.value(item)) }
-        lead["phones"] = .array(item.data.phones.map { JSONValue.string($0) })
-        lead["email_list"] = .array(item.data.emails.map { JSONValue.string($0) })
+        lead["phones"] = .array(item.data.phones.map { CRMJSON.string($0) })
+        lead["email_list"] = .array(item.data.emails.map { CRMJSON.string($0) })
         lead["score"] = .number(item.data.score.rounded())
         lead["favorite"] = .bool(item.favorite)
         return .object(["event": .string("lead.exported"), "source": .string("lead-generator"),

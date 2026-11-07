@@ -38,9 +38,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: macos/.build
-          key: spm-${{ runner.os }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
+          key: spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
+            spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
 
       - name: Tests (core)
         run: swift test
