@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-from leadgen.config.settings import ROOT, load_settings
+from leadgen.config.settings import ROOT, SECRET_NAMES, load_settings
 from leadgen.core.logging_setup import setup_logging
 from leadgen.scheduler.runner import Pipeline, parse_commit_date, restore_from_notion
 from leadgen.storage import export as export_mod
@@ -97,7 +97,10 @@ def cmd_diagnose(args, settings) -> int:
     store = Store(args.db) if Path(args.db).exists() else Store(":memory:")
     pipe = Pipeline(settings, store)
     print(f"Режим: {settings.mode}")
-    print("Секреты: скрыты (не выводятся в диагностике)")
+    # Печатаем только имена из фиксированного списка и «есть/нет»: сами значения секретов
+    # в вывод не попадают ни целиком, ни частично (code scanning: py/clear-text-logging).
+    print("Секреты:", ", ".join(f"{name}={'есть' if settings.has_secret(name) else 'нет'}"
+                                for name in SECRET_NAMES))
     print("\nИсточники:")
     for src in pipe.build_sources(list(settings.section("sources").keys())):
         st = store.source_state(src.name)

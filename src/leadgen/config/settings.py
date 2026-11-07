@@ -51,6 +51,10 @@ class Settings:
         v = self.secrets.get(name)
         return v or None
 
+    def has_secret(self, name: str) -> bool:
+        """Задан ли секрет — без раскрытия значения (для диагностики)."""
+        return bool(self.secrets.get(name))
+
     def secret_values(self) -> list[str]:
         """Значения секретов — для вычистки из логов."""
         return [v for v in self.secrets.values() if v and len(v) >= 6]
