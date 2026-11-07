@@ -533,7 +533,7 @@ public struct NotionDestination: CRMDestination {
         case .emails: raw = item.data.emails.first ?? ""
         default: raw = field.value(item)
         }
-        if type == "checkbox" { return .bool(field == .favorite ? item.favorite : !raw.isEmpty) }
+        if type == "checkbox" { return .object(["checkbox": .bool(field == .favorite ? item.favorite : !raw.isEmpty)]) }
         let text = String(raw.prefix(2000))
         guard !text.isEmpty else { return nil }
         func rich(_ s: String) -> CRMJSON { .array([.object(["text": .object(["content": .string(s)])])]) }
