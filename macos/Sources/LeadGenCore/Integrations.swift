@@ -106,6 +106,28 @@ public enum OAuthProvider: String, Sendable, CaseIterable {
         }
     }
 
+    /// Консоль, где создаётся приложение и берётся ключ.
+    public var consolePage: URL {
+        switch self {
+        case .google: return URL(string: "https://console.cloud.google.com/apis/credentials")!
+        case .dropbox: return URL(string: "https://www.dropbox.com/developers/apps")!
+        case .microsoft: return URL(string: "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade")!
+        }
+    }
+
+    /// Как называется поле с идентификатором в консоли.
+    public var clientIDLabel: String {
+        switch self {
+        case .google: return "Client ID"
+        case .dropbox: return "App key"
+        case .microsoft: return "Application (client) ID"
+        }
+    }
+
+    /// Запись в Связке ключей с ключом, введённым пользователем. Общая для всех учётных записей
+    /// приложения на этом Mac: ключ приложения принадлежит владельцу Mac, а не учётной записи.
+    public var keychainAccount: String { "integration.oauthkey.\(rawValue)" }
+
     /// Google для приложений «Desktop» требует client_secret и при PKCE; он не считается
     /// секретом (Google: installed apps), но всё равно приходит из секрета репозитория, не из кода.
     public var clientSecretKey: String? { self == .google ? "LGGoogleClientSecret" : nil }
@@ -117,6 +139,38 @@ public enum OAuthProvider: String, Sendable, CaseIterable {
         case .dropbox: return [("token_access_type", "offline")]
         case .microsoft: return [("prompt", "select_account")]
         }
+    }
+}
+
+/// Ключ OAuth-приложения, который пользователь ввёл в приложении («Добавить ключ»).
+/// Хранится только в Связке ключей.
+public struct OAuthKey: Codable, Equatable, Sendable {
+    public var clientID: String
+    public var clientSecret: String?
+
+    public init(clientID: String, clientSecret: String? = nil) {
+        self.clientID = clientID
+        self.clientSecret = clientSecret
+    }
+
+    /// Подходит ли ключ поставщику: идентификатор без пробелов, для Google ещё и секрет.
+    public func problem(for provider: OAuthProvider) -> String? {
+        let id = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if id.isEmpty { return "Введите \(provider.clientIDLabel)" }
+        if id.contains(where: { $0.isWhitespace }) || id.hasPrefix("$") { return "\(provider.clientIDLabel) не должен содержать пробелов" }
+        if provider.clientSecretKey != nil, (clientSecret ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Для Google нужен ещё Client secret"
+        }
+        return nil
+    }
+
+    public func encoded() -> String {
+        (try? JSONEncoder().encode(self)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    }
+
+    public static func decode(_ text: String?) -> OAuthKey? {
+        guard let data = text?.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(OAuthKey.self, from: data)
     }
 }
 
@@ -142,6 +196,18 @@ public struct OAuthClient: Equatable, Sendable {
         let secret = clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.clientSecret = (secret?.isEmpty ?? true) || secret?.hasPrefix("$") == true ? nil : secret
         if provider.clientSecretKey != nil && self.clientSecret == nil { return nil }
+    }
+
+    /// Клиент из ключа, введённого пользователем.
+    public init?(provider: OAuthProvider, key: OAuthKey) {
+        guard key.problem(for: provider) == nil else { return nil }
+        self.init(provider: provider, clientID: key.clientID, clientSecret: key.clientSecret)
+    }
+
+    /// Ключ, вшитый при сборке, главнее введённого вручную: владелец сборки отвечает за свой ключ.
+    public static func resolve(_ provider: OAuthProvider, bundle: Bundle = .main, stored: OAuthKey?) -> OAuthClient? {
+        if let built = fromBundle(provider, bundle: bundle) { return built }
+        return stored.flatMap { OAuthClient(provider: provider, key: $0) }
     }
 
     public static func fromBundle(_ provider: OAuthProvider, bundle: Bundle = .main) -> OAuthClient? {
@@ -181,7 +247,7 @@ public enum IntegrationError: Error, Equatable, LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
-        case .notConfigured(let p): return "В этой сборке не задан ключ приложения (\(p.buildVariable))"
+        case .notConfigured(let p): return "Не задан ключ приложения (\(p.buildVariable)). Нажмите «Добавить ключ» и введите свой"
         case .denied(let s): return "Вход отменён: \(s)"
         case .stateMismatch: return "Ответ браузера не относится к этому входу. Попробуйте ещё раз"
         case .badResponse(let s): return "Непонятный ответ сервиса: \(s)"
