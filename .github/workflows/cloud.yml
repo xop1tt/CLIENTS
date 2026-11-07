@@ -12,6 +12,7 @@ on:
       - "macos/Sources/LeadGenCore/**"
       - "macos/Sources/CSQLite/**"
       - "macos/Tests/LeadCloudTests/**"
+      - "macos/Tests/LeadStoreEncryptionTests/**"
       - "macos/scripts/linux-cloud-tests.sh"
       - ".github/workflows/cloud.yml"
   pull_request:
@@ -21,6 +22,7 @@ on:
       - "macos/Sources/LeadGenCore/**"
       - "macos/Sources/CSQLite/**"
       - "macos/Tests/LeadCloudTests/**"
+      - "macos/Tests/LeadStoreEncryptionTests/**"
       - "macos/scripts/linux-cloud-tests.sh"
       - ".github/workflows/cloud.yml"
   workflow_dispatch:
@@ -80,7 +82,7 @@ jobs:
           source supabase/tests/stack/env.sh
           docker run --rm --network host -v "$PWD/macos":/src -v "$STACK_MAIL_DIR":"$STACK_MAIL_DIR" -w /src \
             -e LG_STACK_URL="$SUPABASE_URL" -e LG_STACK_ANON="$SUPABASE_ANON_KEY" -e LG_STACK_MAIL="$STACK_MAIL_DIR" \
-            swift:6.1-noble bash -c "apt-get update -qq && apt-get install -y -qq libsqlite3-dev >/dev/null && ./scripts/linux-cloud-tests.sh"
+            swift:6.1-noble bash -c "apt-get update -qq && apt-get install -y -qq libsqlcipher-dev >/dev/null && ./scripts/linux-cloud-tests.sh"
 
       - name: Stack logs on failure
         if: failure()

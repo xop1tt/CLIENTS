@@ -163,7 +163,8 @@ final class AppModel {
         guard !inert else { return }
 
         do {
-            let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath)
+            let store = try LeadStore(path: defaults.string(forKey: "data.path.\(username.lowercased())") ?? defaultDatabasePath,
+                                      key: try KeychainDatabaseKeyProvider.shared.databaseKey())
             if isCloud && !store.syncTracking { try store.enableSyncTracking() }
             self.store = store
             applyingRemote = true
@@ -315,7 +316,7 @@ final class AppModel {
         guard !searching else { return }
         // Отдельное соединение с базой: поиск пишет, не мешая интерфейсу.
         let repository: LeadStore
-        do { repository = try LeadStore(path: databasePath) } catch {
+        do { repository = try LeadStore(path: databasePath, key: try KeychainDatabaseKeyProvider.shared.databaseKey()) } catch {
             lastError = "Поиск не запущен: \(error.localizedDescription)"
             return
         }

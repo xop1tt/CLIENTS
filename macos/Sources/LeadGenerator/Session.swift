@@ -310,7 +310,7 @@ final class SessionModel {
         guard FileManager.default.fileExists(atPath: path) else { return "У этой учётной записи нет базы лидов." }
         do {
             model.backupNow()
-            let src = try LeadStore(path: path)
+            let src = try LeadStore(path: path, key: try KeychainDatabaseKeyProvider.shared.databaseKey())
             defer { src.db.close() }
             let total = try src.allLeads(includeDeleted: true).count
             let count = try target.importFrom(src)
@@ -393,7 +393,7 @@ final class SessionModel {
         let target = auth.dataDirectory(for: username).appendingPathComponent("leads.db")
         guard !FileManager.default.fileExists(atPath: target.path) else { return nil }
         do {
-            let old = try LeadStore(path: legacy.path)
+            let old = try LeadStore(path: legacy.path, key: try KeychainDatabaseKeyProvider.shared.databaseKey())
             try old.backup(to: target)
             old.db.close()
             let renamed = legacy.deletingLastPathComponent().appendingPathComponent("leads-1.0-backup.db")

@@ -1,2 +1,3 @@
-// Системный SQLite для сборки ядра на Linux (тестовый стенд). На macOS используется модуль SQLite3 из SDK.
-#include <sqlite3.h>
+// SQLCipher (SQLite с шифрованием) для сборки ядра на Linux (тестовый стенд): пакет libsqlcipher-dev.
+// На macOS используется модуль SQLCipher из пакета SQLCipher.swift.
+#include <sqlcipher/sqlite3.h>
