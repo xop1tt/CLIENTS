@@ -1,6 +1,8 @@
 name: macOS app
 
-# Ветка PR собирается один раз (событие pull_request), main — после слияния.
+# В каждом PR идут только быстрые проверки: swift test (ядро, поиск, облако, интерфейс), до 10 минут.
+# Полная сборка (универсальное приложение, проверка запуска, установщик) — только после слияния в main.
+# Всё, что может идти дольше 10 минут, тоже держим только для main (см. Wiki → Тестирование).
 on:
   push:
     branches: [main]
@@ -18,10 +20,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  tests:
+    name: Tests (swift test)
     # Стандартные раннеры (включая macOS) бесплатны для публичных репозиториев.
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: macos
@@ -42,13 +45,41 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
 
-      - name: Tests (core)
-        run: swift test
+      - name: Tests (core, search, cloud, interface)
+        run: swift test --enable-code-coverage
+
+      # Покрытие строк по модулям попадает в сводку запуска. Это справка, а не условие:
+      # порог добавим, когда накопится история значений.
+      - name: Coverage summary
+        if: success() || failure()
+        continue-on-error: true
+        run: python3 scripts/swift-coverage-summary.py "$(swift test --show-codecov-path)" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    # Только после слияния в main (и вручную): в PR полная сборка не нужна.
+    if: github.event_name != 'pull_request'
+    needs: tests
+    runs-on: macos-15
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: macos
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache SwiftPM build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: macos/.build
+          key: spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-${{ hashFiles('macos/Sources/**', 'macos/Tests/**') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ github.event.repository.name }}-${{ hashFiles('macos/Package.swift', 'macos/Package.resolved') }}-
 
       - name: Build app
         env:
-          # Универсальная сборка (arm64 + x86_64) — только для main; в PR хватает одной архитектуры.
-          UNIVERSAL: ${{ github.event_name == 'pull_request' && '0' || '1' }}
+          UNIVERSAL: "1"
           # Облако: адрес проекта и ПУБЛИЧНЫЙ ключ из переменных репозитория (не секретов).
           # Не заданы — собирается версия только с локальными учётными записями.
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}

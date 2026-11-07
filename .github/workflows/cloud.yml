@@ -35,7 +35,8 @@ concurrency:
 jobs:
   cloud:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # В PR — не дольше 10 минут; на main запас больше.
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 10 || 25 }}
     services:
       postgres:
         image: postgres:16
