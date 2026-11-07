@@ -315,6 +315,7 @@ struct AccountSettingsView: View {
 struct DataSettingsView: View {
     @Environment(\.appModel) private var model
     @State private var backups: [URL] = []
+    @State private var integrations: IntegrationsController?
 
     var body: some View {
         @Bindable var model = model
@@ -364,13 +365,28 @@ struct DataSettingsView: View {
                 }
             }
             CloudBackupSection()
+            // Те же диски, что в «Интеграциях» меню учётной записи: подключение по кнопке.
+            Section("Подключить облачный диск") {
+                if let integrations {
+                    DriveIntegrationsList(controller: integrations, backupFile: {
+                        let url = model.backupNow()
+                        backups = model.backups()
+                        return url
+                    })
+                }
+            }
             Section("Перенос на другой Mac") {
                 Text("Скопируйте файл базы (или любую резервную копию) на новый Mac и выберите его в «Восстановить из файла…». Ключ VK в копию не попадает — введите его заново в разделе «Источники».")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .onAppear { backups = model.backups() }
+        .onAppear {
+            backups = model.backups()
+            if integrations?.user != model.username {
+                integrations = IntegrationsController(user: model.username, inert: model.isInert)
+            }
+        }
     }
 
     private func chooseFolder() -> URL? {
@@ -440,10 +456,12 @@ struct ExclusionsSettingsView: View {
 
 struct OutreachSettingsView: View {
     @Environment(\.appModel) private var model
+    @State private var mail: MailController?
 
     var body: some View {
         @Bindable var model = model
         Form {
+            if let mail { MailSettingsSection(mail: mail) }
             Section("Подпись в черновиках") {
                 TextEditor(text: $model.signature)
                     .frame(height: 80)
@@ -456,5 +474,8 @@ struct OutreachSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            if mail?.user != model.username.lowercased() { mail = MailController(user: model.username, inert: model.isInert) }
+        }
     }
 }

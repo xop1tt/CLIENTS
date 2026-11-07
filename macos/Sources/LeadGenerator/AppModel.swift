@@ -145,7 +145,11 @@ final class AppModel {
     static let placeholder = AppModel(username: "—", dataDirectory: FileManager.default.temporaryDirectory
         .appendingPathComponent("LeadGenerator-placeholder", isDirectory: true), inert: true)
 
+    /// Модель без базы и без Связки ключей (заглушка и тесты отрисовки).
+    let isInert: Bool
+
     init(username: String, displayName: String? = nil, isCloud: Bool = false, dataDirectory: URL, inert: Bool = false) {
+        self.isInert = inert
         self.username = username
         self.displayName = displayName ?? username
         self.isCloud = isCloud
@@ -284,6 +288,8 @@ final class AppModel {
     func markAllSeen() { act { try $0.markAllSeen() } }
     func setNote(_ id: String, _ note: String) { act { try $0.setNote(id, note) } }
     func events(_ id: String) -> [LeadEvent] { (try? store?.events(for: id)) ?? [] }
+    /// Запись в «Историю» лида: например, «Письмо отправлено на …» или «Звонок …».
+    func logEvent(_ id: String, _ action: String) { act { try $0.logEvent(id, action) } }
 
     func exclude(_ kind: ExclusionKind, _ value: String) {
         act { try $0.addExclusion(kind, value) }

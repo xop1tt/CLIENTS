@@ -39,6 +39,20 @@ if [[ -n "${SUPABASE_URL:-}" && -n "${SUPABASE_ANON_KEY:-}" ]]; then
   CLOUD_KEYS="  <key>LGSupabaseURL</key><string>${SUPABASE_URL%/}</string>
   <key>LGSupabaseAnonKey</key><string>${SUPABASE_ANON_KEY}</string>"
 fi
+# Облачные диски (необязательно): идентификаторы OAuth-приложений, которые владелец создаёт
+# в консолях Google, Dropbox и Microsoft (см. Wiki → Интеграции). Не заданы — кнопка
+# «Подключиться» у этого диска недоступна, WebDAV-диски работают всегда.
+OAUTH_KEYS=""
+add_oauth_key() { # <ключ Info.plist> <значение>
+  [[ -z "$2" ]] && return 0
+  if [[ ! "$2" =~ ^[A-Za-z0-9._-]+$ ]]; then echo "Недопустимые символы в значении для $1" >&2; exit 1; fi
+  OAUTH_KEYS+="  <key>$1</key><string>$2</string>
+"
+}
+add_oauth_key LGGoogleClientID "${GOOGLE_OAUTH_CLIENT_ID:-}"
+add_oauth_key LGGoogleClientSecret "${GOOGLE_OAUTH_CLIENT_SECRET:-}"
+add_oauth_key LGDropboxAppKey "${DROPBOX_APP_KEY:-}"
+add_oauth_key LGMicrosoftClientID "${MICROSOFT_CLIENT_ID:-}"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -63,6 +77,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleURLSchemes</key><array><string>leadgenerator</string></array>
   </dict></array>
 ${CLOUD_KEYS}
+${OAUTH_KEYS}
 </dict>
 </plist>
 PLIST
