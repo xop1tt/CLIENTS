@@ -127,7 +127,10 @@ def cmd_diagnose(args, settings) -> int:
 
 def cmd_export(args, settings) -> int:
     store = Store(args.db)
-    n = export_mod.export(store, Path(args.out), args.format)
+    try:
+        n = export_mod.export(store, Path(args.out), args.format)
+    finally:
+        store.close()
     print(f"Экспортировано {n} записей в {args.out}. Не коммитьте этот файл в публичный репозиторий!")
     return 0
 
