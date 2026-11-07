@@ -618,7 +618,9 @@ public struct WebhookDestination: CRMDestination {
         guard var comps = URLComponents(string: s), comps.scheme?.lowercased() == "https",
               let host = comps.host, !host.isEmpty else { throw bad }
         comps.scheme = "https"
-        guard let u = comps.url, u.scheme == "https", u.host == host else { throw bad }
+        // Хост не сравниваем со строкой из URLComponents: юникодный домен (bücher.example)
+        // в URL может стать punycode (xn--bcher-kva.example).
+        guard let u = comps.url, u.scheme == "https", let h = u.host, !h.isEmpty else { throw bad }
         return u
     }
 
