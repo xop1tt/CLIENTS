@@ -28,4 +28,5 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest
+      # Покрытие строк не должно падать ниже порога (сейчас около 91%).
+      - run: python -m pytest --cov=src/leadgen --cov-report=term-missing:skip-covered --cov-fail-under=90

@@ -71,8 +71,8 @@ jobs:
           export LEADGEN_VERSION="${TAG#v}"
           ./scripts/build-app.sh build
           ./scripts/smoke-test.sh
-          ./scripts/make-dmg.sh "build/Lead-Generator-${TAG}-macOS.dmg"
-          (cd build && shasum -a 256 "Lead-Generator-${TAG}-macOS.dmg" | tee "Lead-Generator-${TAG}-macOS.dmg.sha256")
+          ./scripts/make-dmg.sh "build/Customers-${TAG}-macOS.dmg"
+          (cd build && shasum -a 256 "Customers-${TAG}-macOS.dmg" | tee "Customers-${TAG}-macOS.dmg.sha256")
 
       - name: Publish release
         env:
@@ -80,13 +80,13 @@ jobs:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then echo "Неверный тег: $TAG" >&2; exit 1; fi
-          files=("macos/build/Lead-Generator-${TAG}-macOS.dmg" "macos/build/Lead-Generator-${TAG}-macOS.dmg.sha256")
+          files=("macos/build/Customers-${TAG}-macOS.dmg" "macos/build/Customers-${TAG}-macOS.dmg.sha256")
           if gh release view "$TAG" >/dev/null 2>&1; then
             # Релиз уже создан (например, через интерфейс GitHub): только прикладываем файлы.
             gh release upload "$TAG" "${files[@]}" --clobber
             exit 0
           fi
           notes=".github/release-notes/${TAG}.md"
-          args=(--title "Lead Generator ${TAG#v}" --target "$GITHUB_SHA")
+          args=(--title "Customers ${TAG#v}" --target "$GITHUB_SHA")
           if [ -f "$notes" ]; then args+=(--notes-file "$notes"); else args+=(--generate-notes); fi
           gh release create "$TAG" "${files[@]}" "${args[@]}"
