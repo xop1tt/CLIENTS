@@ -90,11 +90,11 @@ jobs:
         run: ./scripts/smoke-test.sh
 
       - name: Pack installer
-        run: ./scripts/make-dmg.sh build/Lead-Generator-macOS.dmg
+        run: ./scripts/make-dmg.sh build/Customers-macOS.dmg
 
       - name: Upload app
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: Lead-Generator-macOS
-          path: macos/build/Lead-Generator-macOS.dmg
+          name: Customers-macOS
+          path: macos/build/Customers-macOS.dmg
           retention-days: 14

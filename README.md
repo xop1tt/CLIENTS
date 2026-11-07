@@ -49,7 +49,7 @@ Lead Generator просматривает открытые источники: R
 
 ## 🚀 Быстрый старт
 
-1. Скачайте `Lead-Generator-vX.Y.Z-macOS.dmg` со страницы [последнего релиза](https://github.com/xop1tt/CLIENTS/releases/latest).
+1. Скачайте `Customers-vX.Y.Z-macOS.dmg` со страницы [последнего релиза](https://github.com/xop1tt/CLIENTS/releases/latest).
 2. Откройте dmg и перетащите **Lead Generator** в «Программы».
 3. При первом запуске: правый клик по приложению → **Открыть** → **Открыть**
    (сборка без платной подписи Apple, macOS спросит один раз).
