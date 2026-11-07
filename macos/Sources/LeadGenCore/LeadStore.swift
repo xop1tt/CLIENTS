@@ -409,7 +409,7 @@ public final class LeadStore: @unchecked Sendable {
             if domains.contains(where: { dom in set.contains(where: { dom == $0 || dom.hasSuffix("." + $0) }) }) { return true }
         }
         if let set = rules[.phone], d.phones.contains(where: { set.contains(Normalize.phone($0)) }) { return true }
-        if let set = rules[.email], d.emails.contains(where: { set.contains(Normalize.email($0)) }) { return true }
+        if let set = rules[.email], d.emails.contains(where: { set.contains(Normalize.emailToken($0)) }) { return true }
         if let set = rules[.name] {
             let names = [d.title, d.customerName ?? ""].map(Normalize.name).filter { !$0.isEmpty }
             if names.contains(where: set.contains) { return true }
@@ -433,7 +433,7 @@ public final class LeadStore: @unchecked Sendable {
                 else if v.contains(".") && !v.contains(" ") { kind = .domain }
                 else { kind = nil }
                 if let kind {
-                    let norm = Normalize.value(v, kind: kind)
+                    let norm = (kind == .email) ? Normalize.emailToken(v) : Normalize.value(v, kind: kind)
                     let added = try db.run("INSERT OR IGNORE INTO exclusions(kind, value, created_at) VALUES(?,?,?)",
                                            [.text(kind.rawValue), .text(norm), .text(ISODate.now())])
                     if added > 0 { try markDirty("exclusion", "\(kind.rawValue)|\(norm)", ["deleted"]) }

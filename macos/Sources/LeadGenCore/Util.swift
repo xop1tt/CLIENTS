@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Даты в формате Python `datetime.isoformat()`: «2026-11-05T09:42:00+00:00», иногда с микросекундами.
 public enum ISODate {
@@ -56,6 +57,16 @@ public enum Normalize {
 
     public static func email(_ raw: String) -> String {
         raw.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // Детерминированный токен для хранения email в БД без cleartext.
+    // Важно: для production ключ должен приходить из безопасного хранилища/конфига.
+    private static let emailHMACKey = SymmetricKey(data: Data("LeadGenCore.Email.HMAC.v1".utf8))
+
+    public static func emailToken(_ raw: String) -> String {
+        let normalized = email(raw)
+        let mac = HMAC<SHA256>.authenticationCode(for: Data(normalized.utf8), using: emailHMACKey)
+        return Data(mac).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Название без кавычек, регистра, «ё» и лишних пробелов.
