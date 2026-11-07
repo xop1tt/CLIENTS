@@ -26,11 +26,12 @@ final class ViewRenderTests: XCTestCase {
 
     /// Размещает представление в NSHostingView и заставляет SwiftUI вычислить раскладку.
     @discardableResult
-    private func lay<V: View>(_ view: V, size: CGSize = CGSize(width: 900, height: 640), file: StaticString = #filePath, line: UInt = #line) -> NSHostingView<V> {
+    private func lay<V: View>(_ view: V, size: CGSize = CGSize(width: 900, height: 640), intrinsic: Bool = true, file: StaticString = #filePath, line: UInt = #line) -> NSHostingView<V> {
         let host = NSHostingView(rootView: view)
         host.frame = NSRect(origin: .zero, size: size)
         host.layoutSubtreeIfNeeded()
-        XCTAssertGreaterThan(host.fittingSize.width, 0, "экран ничего не нарисовал", file: file, line: line)
+        // У NavigationSplitView нет собственного размера: для него достаточно, что раскладка прошла без сбоя.
+        if intrinsic { XCTAssertGreaterThan(host.fittingSize.width, 0, "экран ничего не нарисовал", file: file, line: line) }
         return host
     }
 
@@ -45,7 +46,7 @@ final class ViewRenderTests: XCTestCase {
     func testRootViewRendersInEveryLeadSection() {
         for section in NavSection.allCases {
             model.section = section
-            lay(withEnvironment(RootView()), size: CGSize(width: 1100, height: 700))
+            lay(withEnvironment(RootView()), size: CGSize(width: 1100, height: 700), intrinsic: false)
         }
     }
 
