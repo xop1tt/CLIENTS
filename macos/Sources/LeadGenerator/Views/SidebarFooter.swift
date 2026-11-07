@@ -10,6 +10,7 @@ struct SidebarFooter: View {
     @Environment(\.openSettings) private var openSettings
     @State private var accountShown = false
     @State private var helpShown = false
+    @State private var integrationsShown = false
     @State private var updates = UpdateController.shared
 
     var body: some View {
@@ -46,6 +47,13 @@ struct SidebarFooter: View {
         }
         .scaledPadding(.horizontal, 8)
         .frame(height: 48 * look.scale)
+        // Окружение передаётся явно: лист живёт в отдельном NSHostingView.
+        .sheet(isPresented: $integrationsShown) {
+            IntegrationsSheet(model: model)
+                .environment(\.appModel, model)
+                .environment(\.session, session)
+                .environment(\.look, look)
+        }
         .onAppear { updates.refreshRecentReleases() }
     }
 
@@ -78,6 +86,7 @@ struct SidebarFooter: View {
             Divider()
             VStack(spacing: 0) {
                 MenuRow("Настройки…", icon: "gearshape") { accountShown = false; openSettings() }
+                MenuRow("Интеграции…", icon: "puzzlepiece.extension") { accountShown = false; integrationsShown = true }
                 if let sync = session.sync {
                     MenuRow("Синхронизировать сейчас", icon: "arrow.triangle.2.circlepath") { accountShown = false; sync.syncNow() }
                 }

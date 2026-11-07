@@ -5,12 +5,16 @@ import SwiftUI
 struct LeadInspector: View {
     @Environment(\.appModel) private var model
     @Environment(\.look) private var look
+    @Environment(\.openSettings) private var openSettings
     let lead: LeadItem
 
     @State private var tab = 0
     @State private var note = ""
-    @State private var channel: DraftWriter.Channel = .message
+    @State private var recipient = ""
+    @State private var subject = ""
     @State private var draft = ""
+    @State private var mail: MailController?
+    @State private var sendError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -19,7 +23,7 @@ struct LeadInspector: View {
                 .scaledPadding(.top, 14)
             Picker("", selection: $tab) {
                 Text("Обзор").tag(0)
-                Text("Обращение").tag(1)
+                Text("Написать").tag(1)
                 Text("История").tag(2)
             }
             .pickerStyle(.segmented)
@@ -41,15 +45,21 @@ struct LeadInspector: View {
         }
         .onAppear(perform: load)
         .onChange(of: lead.id) { _, _ in load() }
-        .onChange(of: channel) { _, _ in draft = makeDraft() }
     }
 
     private func load() {
         note = lead.note
-        draft = makeDraft()
+        resetDraft()
+        recipient = lead.data.emails.first ?? ""
+        sendError = nil
+        if mail?.user != model.username.lowercased() { mail = MailController(user: model.username, inert: model.isInert) }
     }
 
-    private func makeDraft() -> String { DraftWriter.draft(for: lead.data, channel: channel, signature: model.signature) }
+    private func resetDraft() {
+        let d = DraftWriter.email(for: lead.data, signature: model.signature)
+        subject = d.subject
+        draft = d.body
+    }
 
     // MARK: Заголовок
 
@@ -208,6 +218,16 @@ struct LeadInspector: View {
                         Text(row.2).appFont(12.5).textSelection(.enabled)
                     }
                     Spacer(minLength: 0)
+                    if row.0 == "phone", ContactLinks.telURL(row.2) != nil {
+                        Button { call(row.2) } label: { Image(systemName: "phone.fill") }
+                            .buttonStyle(.borderless).foregroundStyle(.green).help("Позвонить через FaceTime или iPhone")
+                            .accessibilityLabel("Позвонить \(row.2)")
+                    }
+                    if row.0 == "envelope", ContactLinks.isEmail(row.2) {
+                        Button { write(to: row.2) } label: { Image(systemName: "envelope.fill") }
+                            .buttonStyle(.borderless).foregroundStyle(.tint).help("Написать письмо")
+                            .accessibilityLabel("Написать на \(row.2)")
+                    }
                     Button { copy(row.2) } label: { Image(systemName: "doc.on.doc") }
                         .buttonStyle(.borderless).foregroundStyle(.tertiary).help("Скопировать")
                 }
@@ -232,15 +252,35 @@ struct LeadInspector: View {
         .background(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
     }
 
-    // MARK: Обращение
+    // MARK: Написать
+
+    private var outgoing: OutgoingMail {
+        OutgoingMail(to: recipient.trimmingCharacters(in: .whitespaces), subject: subject, body: draft)
+    }
 
     @ViewBuilder private var outreach: some View {
+        let smtp = mail?.smtpReady == true
         VStack(alignment: .leading, spacing: 10) {
-            PanelHeader(title: "Черновик первого обращения")
-            Picker("Канал", selection: $channel) {
-                ForEach(DraftWriter.Channel.allCases) { Text($0.title).tag($0) }
+            PanelHeader(title: "Email")
+            HStack(spacing: 6) {
+                Text("Кому").appFont(12.5).foregroundStyle(.secondary).frame(width: 46 * look.scale, alignment: .leading)
+                TextField("", text: $recipient, prompt: Text("адрес получателя"))
+                    .labelsHidden().accessibilityLabel("Кому").inputField()
+                if lead.data.emails.count > 1 {
+                    Menu {
+                        ForEach(lead.data.emails, id: \.self) { e in Button(e) { recipient = e } }
+                    } label: { Image(systemName: "chevron.down.circle") }
+                    .menuStyle(.borderlessButton).fixedSize().help("Другие адреса лида")
+                }
             }
-            .pickerStyle(.segmented)
+            HStack(spacing: 6) {
+                Text("Тема").appFont(12.5).foregroundStyle(.secondary).frame(width: 46 * look.scale, alignment: .leading)
+                TextField("", text: $subject, prompt: Text("тема письма"))
+                    .labelsHidden().accessibilityLabel("Тема").inputField()
+            }
+            if lead.data.emails.isEmpty {
+                Label("У лида нет email: впишите адрес вручную", systemImage: "info.circle").appFont(11.5).foregroundStyle(.secondary)
+            }
             TextEditor(text: $draft)
                 .appFont(13)
                 .frame(minHeight: 220 * look.scale)
@@ -249,12 +289,75 @@ struct LeadInspector: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
             HStack {
-                Button { copy(draft); model.lastMessage = "Черновик скопирован" } label: { Label("Копировать", systemImage: "doc.on.doc") }
-                Button { draft = makeDraft() } label: { Label("Сбросить", systemImage: "arrow.counterclockwise") }
+                if smtp {
+                    Button { sendNow() } label: { Label("Отправить", systemImage: "paperplane.fill") }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!ContactLinks.isEmail(recipient) || mail?.sending == true)
+                    if mail?.sending == true { ProgressView().controlSize(.small) }
+                    Button { openInMail() } label: { Label("В Почте", systemImage: "envelope") }
+                        .disabled(!ContactLinks.isEmail(recipient))
+                        .help("Открыть письмо в программе «Почта»")
+                } else {
+                    Button { openInMail() } label: { Label("Открыть в Почте", systemImage: "envelope") }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!ContactLinks.isEmail(recipient))
+                }
                 Spacer()
+                Button { copy((subject.isEmpty ? "" : "Тема: \(subject)\n\n") + draft); model.lastMessage = "Письмо скопировано" } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .help("Копировать")
+                Button { resetDraft() } label: { Image(systemName: "arrow.counterclockwise") }.help("Вернуть черновик")
             }
-            Text("Черновик собран по шаблону из фактов о лиде. Отправляете вы сами: массовой рассылки в приложении нет. Подпись задаётся в настройках.")
+            if let sendError { Label(sendError, systemImage: "exclamationmark.triangle.fill").appFont(11.5).foregroundStyle(.red) }
+            if smtp, let a = mail?.account {
+                Text("Отправка с \(a.fromAddress) прямо из приложения\(a.copyToSelf ? ", копия — вам в ящик" : ""). Письмо попадёт в «Историю» лида.")
+                    .appFont(11).foregroundStyle(.secondary)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("Письмо откроется в «Почте». Чтобы отправлять прямо отсюда, подключите почту.").appFont(11).foregroundStyle(.secondary)
+                    Button("Настроить") {
+                        UserDefaults.standard.set(SettingsSection.outreach.rawValue, forKey: "settings.section")
+                        openSettings()
+                    }
+                    .buttonStyle(.link).appFont(11)
+                }
+            }
+            Text("Черновик собран по шаблону из фактов о лиде. Письма уходят по одному, по вашей кнопке: массовой рассылки нет. Подпись задаётся в настройках.")
                 .appFont(11).foregroundStyle(.secondary)
+        }
+    }
+
+    private func write(to address: String) {
+        recipient = address
+        tab = 1
+    }
+
+    private func call(_ phone: String) {
+        guard let url = ContactLinks.telURL(phone) else { return }
+        if NSWorkspace.shared.open(url) { model.logEvent(lead.id, "Звонок: \(phone)") }
+    }
+
+    private func sendNow() {
+        guard let mail else { return }
+        let m = outgoing
+        sendError = nil
+        Task {
+            if await mail.send(m) {
+                model.logEvent(lead.id, "Письмо отправлено на \(m.to)" + (m.subject.isEmpty ? "" : ": «\(m.subject)»"))
+                model.lastMessage = "Письмо отправлено на \(m.to)"
+            } else {
+                sendError = mail.lastError
+            }
+        }
+    }
+
+    private func openInMail() {
+        let m = outgoing
+        if MailController.openInMailApp(m) {
+            model.logEvent(lead.id, "Письмо подготовлено в «Почте» для \(m.to)")
+        } else {
+            sendError = "Не удалось открыть почтовую программу"
         }
     }
 
