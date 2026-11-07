@@ -16,6 +16,18 @@ APP="$OUT/Customers.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/LeadGenerator"
+# SQLCipher (шифрование локальной базы) подключён как динамический фреймворк: кладём его в пакет
+# приложения и добавляем путь поиска Contents/Frameworks. Без него приложение не запустится.
+FRAMEWORK="$(dirname "$BIN")/SQLCipher.framework"
+if [[ ! -d "$FRAMEWORK" ]]; then
+  echo "Не найден $FRAMEWORK — сборка без SQLCipher невозможна" >&2; exit 1
+fi
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$FRAMEWORK" "$APP/Contents/Frameworks/SQLCipher.framework"
+RPATHS="$(otool -l "$APP/Contents/MacOS/LeadGenerator")"
+if [[ "$RPATHS" != *"@executable_path/../Frameworks"* ]]; then
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/LeadGenerator"
+fi
 # Облако (необязательно): адрес проекта Supabase и ПУБЛИЧНЫЙ ключ (anon / publishable).
 # Секретный ключ проекта (sb_secret_…) сюда никогда не передаётся — приложение его отвергнет.
 # Без этих переменных собирается версия только с локальными учётными записями.

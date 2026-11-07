@@ -117,7 +117,7 @@ final class CloudSyncController {
             let result: Result<SyncReport, Error>
             do {
                 // Своё соединение с базой: синхронизация не мешает интерфейсу и поиску.
-                let store = try LeadStore(path: path)
+                let store = try LeadStore(path: path, key: try KeychainDatabaseKeyProvider.shared.databaseKey())
                 let engine = SyncEngine(auth: auth, store: store, deviceID: DeviceIdentity.id)
                 result = .success(try await engine.sync())
                 store.db.close()
