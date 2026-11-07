@@ -6,6 +6,9 @@ import Foundation
 public final class LeadStore: @unchecked Sendable {
     public private(set) var db: SQLiteDB
     public var path: String { db.path }
+    /// Ключ шифрования базы (SQLCipher). nil — база без шифрования (только тесты и старый код).
+    public let key: DatabaseKey?
+    public var isEncrypted: Bool { key != nil }
     /// Записывать изменения в журнал синхронизации (включено для облачных учётных записей).
     public internal(set) var syncTracking = false
 
@@ -69,15 +72,24 @@ public final class LeadStore: @unchecked Sendable {
     CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     """
 
-    public init(path: String) throws {
+    /// `key` — ключ шифрования. С ключом база хранится зашифрованной; если по этому пути лежит
+    /// незашифрованная база прежней версии, она переписывается в зашифрованную без потери данных.
+    public init(path: String, key: DatabaseKey? = nil) throws {
         try FileManager.default.createDirectory(at: URL(fileURLWithPath: path).deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        db = try SQLiteDB(path: path)
+        self.key = key
+        db = try Self.openFile(path, key: key)
         try db.exec("PRAGMA journal_mode=WAL")
         try db.exec(Self.schema)
         try db.run("INSERT OR IGNORE INTO kv(key, value) VALUES('schema_version', '1')")
         try migrate()
         syncTracking = value("sync.enabled") == "1"
+    }
+
+    /// Открывает файл базы: с ключом — через шифрование (и перевод старой базы), без ключа — как есть.
+    static func openFile(_ path: String, key: DatabaseKey?) throws -> SQLiteDB {
+        guard let key else { return try SQLiteDB(path: path) }
+        return try EncryptedDatabase.open(path: path, key: key)
     }
 
     /// Включить журнал изменений для облака. Флаг хранится в самой базе, поэтому его видят
@@ -439,11 +451,18 @@ public final class LeadStore: @unchecked Sendable {
     public func backup(to url: URL) throws {
         try? FileManager.default.removeItem(at: url)
         try db.run("VACUUM INTO ?", [.text(url.path)])
+        // Копия зашифрованной базы шифруется тем же ключом. Незашифрованную копию не оставляем.
+        if key != nil && EncryptedDatabase.state(of: url.path) != .encrypted {
+            try? FileManager.default.removeItem(at: url)
+            throw SQLiteError(message: "резервная копия получилась незашифрованной и удалена")
+        }
     }
 
     /// Заменяет базу копией. Текущая база перед этим сохраняется рядом.
     public func restore(from url: URL) throws {
-        let probe = try SQLiteDB(path: url.path, readOnly: true)
+        // Копии прежних версий не зашифрованы, новые — зашифрованы ключом этого Mac.
+        let probeKey = EncryptedDatabase.state(of: url.path) == .encrypted ? key : nil
+        let probe = try SQLiteDB(path: url.path, readOnly: true, key: probeKey)
         let valid = try probe.tableExists("leads")
         probe.close()
         guard valid else { throw SQLiteError(message: "это не резервная копия Customers") }
@@ -464,10 +483,11 @@ public final class LeadStore: @unchecked Sendable {
             try fm.moveItem(at: staged, to: current)
         } catch {
             try? fm.copyItem(at: safety, to: current)
-            db = try SQLiteDB(path: current.path)
+            db = try Self.openFile(current.path, key: key)
             throw error
         }
-        db = try SQLiteDB(path: current.path)
+        // Незашифрованная копия прежней версии здесь же переписывается в зашифрованную.
+        db = try Self.openFile(current.path, key: key)
         try db.exec("PRAGMA journal_mode=WAL")
         try db.exec(Self.schema)
         try migrate()
@@ -489,7 +509,7 @@ public final class LeadStore: @unchecked Sendable {
         db.close()
         let fm = FileManager.default
         for suffix in ["", "-wal", "-shm"] { try? fm.removeItem(atPath: old + suffix) }
-        db = try SQLiteDB(path: target.path)
+        db = try Self.openFile(target.path, key: key)
         try db.exec("PRAGMA journal_mode=WAL")
         return target.path
     }

@@ -1,6 +1,9 @@
 import Foundation
-#if canImport(SQLite3)
-import SQLite3
+// macOS: SQLCipher (SQLite с шифрованием AES-256), пакет SQLCipher.swift.
+// Linux (тестовый стенд): системный libsqlcipher через модуль CSQLite.
+// Системный SQLite3 не используется: с ним база осталась бы незашифрованной.
+#if canImport(SQLCipher)
+import SQLCipher
 #else
 import CSQLite
 #endif
@@ -48,6 +51,8 @@ public typealias SQLRow = [String: SQLValue]
 
 public struct SQLiteError: Error, LocalizedError {
     public let message: String
+    /// Код результата SQLite (0, если ошибка не от самой библиотеки).
+    public var code: Int32 = 0
     public var errorDescription: String? { "SQLite: \(message)" }
 }
 
@@ -57,7 +62,10 @@ public final class SQLiteDB {
     private var handle: OpaquePointer?
     public let path: String
 
-    public init(path: String, readOnly: Bool = false) throws {
+    /// `key` — ключ шифрования SQLCipher. Без ключа файл открывается как обычная база SQLite.
+    /// С ключом: библиотека обязана быть SQLCipher, а файл — зашифрован этим ключом
+    /// (или ещё не существовать), иначе ошибка, и файл не меняется.
+    public init(path: String, readOnly: Bool = false, key: DatabaseKey? = nil) throws {
         self.path = path
         let flags = readOnly ? SQLITE_OPEN_READONLY : (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE)
         if sqlite3_open_v2(path, &handle, flags | SQLITE_OPEN_FULLMUTEX, nil) != SQLITE_OK {
@@ -67,6 +75,35 @@ public final class SQLiteDB {
             throw SQLiteError(message: msg)
         }
         sqlite3_busy_timeout(handle, 3000)
+        if let key {
+            do {
+                // Без SQLCipher «PRAGMA key» молча ничего не делает и база осталась бы открытой.
+                guard Self.cipherVersion(handle) != nil else {
+                    throw SQLiteError(message: "сборка без SQLCipher: шифрование базы недоступно")
+                }
+                try exec("PRAGMA key = \"\(key.sqlLiteral)\"")
+                // Ключ проверяется только при первом чтении.
+                try exec("SELECT count(*) FROM sqlite_master")
+            } catch let error as SQLiteError {
+                close()
+                if error.code == SQLITE_NOTADB {
+                    throw SQLiteError(message: "не удалось расшифровать базу: ключ не подходит или файл повреждён", code: error.code)
+                }
+                throw error
+            }
+        }
+    }
+
+    /// Версия SQLCipher или nil, если библиотека — обычный SQLite.
+    public var cipherVersion: String? { Self.cipherVersion(handle) }
+
+    private static func cipherVersion(_ handle: OpaquePointer?) -> String? {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(handle, "PRAGMA cipher_version", -1, &stmt, nil) == SQLITE_OK, let stmt else { return nil }
+        defer { sqlite3_finalize(stmt) }
+        guard sqlite3_step(stmt) == SQLITE_ROW, let p = sqlite3_column_text(stmt, 0) else { return nil }
+        let v = String(cString: p)
+        return v.isEmpty ? nil : v
     }
 
     deinit { close() }
@@ -80,10 +117,11 @@ public final class SQLiteDB {
 
     public func exec(_ sql: String) throws {
         var err: UnsafeMutablePointer<CChar>?
-        if sqlite3_exec(handle, sql, nil, nil, &err) != SQLITE_OK {
+        let rc = sqlite3_exec(handle, sql, nil, nil, &err)
+        if rc != SQLITE_OK {
             let msg = err.map { String(cString: $0) } ?? errorMessage
             sqlite3_free(err)
-            throw SQLiteError(message: msg)
+            throw SQLiteError(message: msg, code: rc)
         }
     }
 
