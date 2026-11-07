@@ -11,10 +11,12 @@ struct DriveIntegrationsList: View {
     let controller: IntegrationsController
     let backupFile: () -> URL?
     @State private var webdavFor: DriveService?
+    @State private var keyFor: KeySheetItem?
 
     var body: some View {
         ForEach(DriveService.allCases) { s in
-            DriveRow(service: s, controller: controller, onConnect: { connect(s) }, onUpload: { upload(s) })
+            DriveRow(service: s, controller: controller, onConnect: { connect(s) }, onUpload: { upload(s) },
+                     onKey: { if case .oauth(let p) = s.auth { keyFor = KeySheetItem(provider: p) } })
         }
         if let e = controller.error {
             Label(e, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange).font(.caption)
@@ -25,6 +27,9 @@ struct DriveIntegrationsList: View {
             .font(.caption).foregroundStyle(.secondary)
             .sheet(item: $webdavFor) { s in
                 WebDAVConnectSheet(service: s, controller: controller).environment(\.look, AppearanceSettings.shared)
+            }
+            .sheet(item: $keyFor) { item in
+                OAuthKeySheet(provider: item.provider, controller: controller).environment(\.look, AppearanceSettings.shared)
             }
     }
 
@@ -41,11 +46,22 @@ struct DriveIntegrationsList: View {
     }
 }
 
+/// Для .sheet(item:): поставщик OAuth сам по себе не Identifiable.
+struct KeySheetItem: Identifiable {
+    let provider: OAuthProvider
+    var id: String { provider.rawValue }
+}
+
 private struct DriveRow: View {
     let service: DriveService
     let controller: IntegrationsController
     let onConnect: () -> Void
     let onUpload: () -> Void
+    let onKey: () -> Void
+
+    private var provider: OAuthProvider? { if case .oauth(let p) = service.auth { return p } else { return nil } }
+    /// Введённый пользователем ключ можно изменить или удалить; вшитый в сборку — нет.
+    private var hasOwnKey: Bool { provider.map { controller.keys[$0] != nil && !controller.isBuiltIn($0) } ?? false }
 
     var body: some View {
         let connected = controller.isConnected(service)
@@ -57,7 +73,7 @@ private struct DriveRow: View {
                     Text(service.title)
                     if connected { Text("подключён").font(.caption).foregroundStyle(.green) }
                 }
-                Text(available ? service.subtitle : "Недоступно в этой сборке: не задан ключ приложения")
+                Text(available ? service.subtitle : "Нужен ключ приложения: нажмите «Добавить ключ»")
                     .font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             Spacer(minLength: 8)
@@ -68,14 +84,112 @@ private struct DriveRow: View {
                 Button("Выгрузить копию") { onUpload() }.disabled(controller.busy != nil)
                 Menu {
                     Button("Переподключить") { onConnect() }
+                    if hasOwnKey { Button("Изменить ключ…") { onKey() } }
                     Button("Отключить", role: .destructive) { controller.disconnect(service) }
                 } label: { Image(systemName: "ellipsis.circle") }
                 .menuStyle(.borderlessButton).fixedSize()
             } else {
-                Button("Подключиться") { onConnect() }.disabled(!available || controller.busy != nil)
+                if provider != nil && !available {
+                    Button("Добавить ключ") { onKey() }
+                } else {
+                    Button("Подключиться") { onConnect() }.disabled(!available || controller.busy != nil)
+                    if hasOwnKey {
+                        Menu {
+                            Button("Изменить ключ…") { onKey() }
+                            Button("Удалить ключ", role: .destructive) { if let provider { controller.removeKey(for: provider) } }
+                        } label: { Image(systemName: "ellipsis.circle") }
+                        .menuStyle(.borderlessButton).fixedSize()
+                    }
+                }
             }
         }
         .padding(.vertical, 2)
+    }
+}
+
+/// «Добавить ключ»: идентификатор OAuth-приложения (и секрет для Google), созданного в консоли
+/// сервиса. Ключ хранится только в Связке ключей этого Mac.
+struct OAuthKeySheet: View {
+    let provider: OAuthProvider
+    let controller: IntegrationsController
+    @Environment(\.dismiss) private var dismiss
+    @State private var clientID = ""
+    @State private var secret = ""
+    @State private var problem: String?
+    @State private var copied = false
+
+    private var service: DriveService {
+        switch provider {
+        case .google: return .googleDrive
+        case .dropbox: return .dropbox
+        case .microsoft: return .oneDrive
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                ServiceIcon(kind: .drive(service), size: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ключ приложения для \(service.title)").font(.headline)
+                    Text("Один раз создайте своё бесплатное приложение в консоли сервиса и вставьте его ключ сюда.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Form {
+                TextField(provider.clientIDLabel, text: $clientID)
+                if provider.clientSecretKey != nil {
+                    SecureField("Client secret", text: $secret)
+                }
+            }
+            .formStyle(.grouped)
+            steps
+            HStack(spacing: 8) {
+                Text("Адрес возврата:").font(.caption).foregroundStyle(.secondary)
+                Text(OAuthRedirect.uri).font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
+                Button(copied ? "Скопировано" : "Копировать") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(OAuthRedirect.uri, forType: .string)
+                    copied = true
+                }
+                .buttonStyle(.link).font(.caption)
+            }
+            if let problem { Text(problem).font(.caption).foregroundStyle(.red) }
+            HStack {
+                Link("Открыть консоль", destination: provider.consolePage).font(.callout)
+                Spacer()
+                if controller.keys[provider] != nil && !controller.isBuiltIn(provider) {
+                    Button("Удалить ключ", role: .destructive) { controller.removeKey(for: provider); dismiss() }
+                }
+                Button("Отмена") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Сохранить") {
+                    problem = controller.saveKey(OAuthKey(clientID: clientID, clientSecret: secret), for: provider)
+                    if problem == nil { dismiss() }
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(clientID.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(20)
+        .frame(width: 520)
+        .onAppear {
+            clientID = controller.keys[provider]?.clientID ?? ""
+            secret = controller.keys[provider]?.clientSecret ?? ""
+        }
+    }
+
+    @ViewBuilder private var steps: some View {
+        switch provider {
+        case .dropbox:
+            Text("Консоль Dropbox → Create app → Scoped access → App folder. На вкладке Permissions включите files.content.write и нажмите Submit. На вкладке Settings добавьте адрес возврата в Redirect URIs. App key вставьте выше.")
+                .font(.caption).foregroundStyle(.secondary)
+        case .google:
+            Text("Google Cloud Console → новый проект → включите Google Drive API → экран согласия OAuth (External, область drive.file, ваш Gmail в «Test users») → Credentials → OAuth client ID, тип Desktop app. Client ID и Client secret вставьте выше.")
+                .font(.caption).foregroundStyle(.secondary)
+        case .microsoft:
+            Text("Microsoft Entra → App registrations → New registration («любые организации и личные учётные записи»), платформа Public client (mobile & desktop) с адресом возврата. API permissions → Microsoft Graph → Delegated: Files.ReadWrite.AppFolder и offline_access. Application (client) ID вставьте выше.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
     }
 }
 

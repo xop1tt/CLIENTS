@@ -9,6 +9,8 @@ import Observation
 final class IntegrationsController {
     let user: String
     private(set) var connections: [DriveService: DriveConnection] = [:]
+    /// Ключи приложений, введённые пользователем («Добавить ключ»).
+    private(set) var keys: [OAuthProvider: OAuthKey] = [:]
     /// Сервис, у которого идёт вход или выгрузка.
     private(set) var busy: DriveService? = nil
     var message: String? = nil
@@ -30,13 +32,45 @@ final class IntegrationsController {
             if let c = DriveConnection.decode(Keychain.get(DriveConnection.keychainAccount(s, user: user))) { found[s] = c }
         }
         connections = found
+        var stored: [OAuthProvider: OAuthKey] = [:]
+        for p in OAuthProvider.allCases {
+            if let k = OAuthKey.decode(Keychain.get(p.keychainAccount)) { stored[p] = k }
+        }
+        keys = stored
+    }
+
+    /// Клиент OAuth: ключ сборки или введённый вручную.
+    func oauthClient(_ p: OAuthProvider) -> OAuthClient? { OAuthClient.resolve(p, stored: keys[p]) }
+
+    /// Ключ вшит в сборку: менять и удалять его из приложения нельзя.
+    func isBuiltIn(_ p: OAuthProvider) -> Bool { OAuthClient.fromBundle(p) != nil }
+
+    /// Сохраняет ключ. Возвращает текст ошибки или nil.
+    @discardableResult
+    func saveKey(_ key: OAuthKey, for p: OAuthProvider) -> String? {
+        let clean = OAuthKey(clientID: key.clientID.trimmingCharacters(in: .whitespacesAndNewlines),
+                             clientSecret: p.clientSecretKey == nil ? nil : key.clientSecret?.trimmingCharacters(in: .whitespacesAndNewlines))
+        if let problem = clean.problem(for: p) { return problem }
+        guard !inert else { keys[p] = clean; return nil }
+        guard Keychain.set(p.keychainAccount, clean.encoded()) else { return "Не удалось сохранить ключ в Связке ключей" }
+        keys[p] = clean
+        message = "Ключ сохранён"
+        return nil
+    }
+
+    /// Удаляет введённый ключ и подключения, сделанные с ним: токены без ключа бесполезны.
+    func removeKey(for p: OAuthProvider) {
+        if !inert { Keychain.set(p.keychainAccount, "") }
+        keys[p] = nil
+        for s in DriveService.allCases where s.auth == .oauth(p) && isConnected(s) { disconnect(s) }
+        message = "Ключ удалён"
     }
 
     func isConnected(_ s: DriveService) -> Bool { connections[s] != nil }
 
     /// Можно ли подключить сервис в этой сборке (для OAuth нужен ключ приложения).
     func isAvailable(_ s: DriveService) -> Bool {
-        if case .oauth(let p) = s.auth { return OAuthClient.fromBundle(p) != nil }
+        if case .oauth(let p) = s.auth { return oauthClient(p) != nil }
         return true
     }
 
@@ -67,7 +101,7 @@ final class IntegrationsController {
 
     func connectOAuth(_ s: DriveService) async {
         guard case .oauth(let provider) = s.auth else { return }
-        guard let client = OAuthClient.fromBundle(provider) else {
+        guard let client = oauthClient(provider) else {
             error = IntegrationError.notConfigured(provider).localizedDescription
             return
         }
@@ -133,7 +167,7 @@ final class IntegrationsController {
         defer { busy = nil }
         do {
             if case .oauth(let provider) = s.auth, let token = c.token, token.isExpired() {
-                guard let client = OAuthClient.fromBundle(provider) else { throw IntegrationError.notConfigured(provider) }
+                guard let client = oauthClient(provider) else { throw IntegrationError.notConfigured(provider) }
                 guard let refresh = token.refreshToken else { throw IntegrationError.reauthorize }
                 let (data, response) = try await URLSession.shared.data(for: OAuthFlow.refreshRequest(client, refreshToken: refresh))
                 if (response as? HTTPURLResponse)?.statusCode == 400 || (response as? HTTPURLResponse)?.statusCode == 401 {
