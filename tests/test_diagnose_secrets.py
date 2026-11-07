@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from leadgen import cli
-from leadgen.config.settings import SECRET_NAMES, Settings
+from leadgen.config.settings import ENV_VAR_NAMES, SECRET_NAMES, Settings
 
 
 def _run(tmp_path, capsys, secrets):
@@ -36,6 +36,10 @@ def test_unknown_keys_are_not_printed(tmp_path, capsys):
     assert "SOMETHING_ELSE" not in out and "very-secret-value-123" not in out
 
 
-def test_has_secret():
+def test_is_set():
     s = Settings(data={}, secrets={"A": "1", "B": ""})
-    assert s.has_secret("A") and not s.has_secret("B") and not s.has_secret("C")
+    assert s.is_set("A") and not s.is_set("B") and not s.is_set("C")
+
+
+def test_diagnose_lists_the_same_names_that_are_loaded():
+    assert ENV_VAR_NAMES is SECRET_NAMES
