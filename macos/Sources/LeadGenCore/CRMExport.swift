@@ -609,11 +609,18 @@ public struct WebhookDestination: CRMDestination {
 
     public init(url raw: String) throws { url = try Self.normalize(raw) }
 
+    /// Адрес вебхука секретный (в нём ключ сценария), поэтому принимается только https.
+    /// Разбираем через `URLComponents` и собираем `URL` уже из проверенных частей со схемой
+    /// https: так адрес не превращается в `URL`, пока не доказано, что он зашифрован.
     public static func normalize(_ raw: String) throws -> URL {
+        let bad = CRMError.invalidAddress("Нужен адрес вебхука, начинающийся с https://")
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let u = URL(string: s), u.scheme?.lowercased() == "https", let host = u.host, !host.isEmpty else {
-            throw CRMError.invalidAddress("Нужен адрес вебхука, начинающийся с https://")
-        }
+        guard var comps = URLComponents(string: s), comps.scheme?.lowercased() == "https",
+              let host = comps.host, !host.isEmpty else { throw bad }
+        comps.scheme = "https"
+        // Хост не сравниваем со строкой из URLComponents: юникодный домен (bücher.example)
+        // в URL может стать punycode (xn--bcher-kva.example).
+        guard let u = comps.url, u.scheme == "https", let h = u.host, !h.isEmpty else { throw bad }
         return u
     }
 
