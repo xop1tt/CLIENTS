@@ -27,6 +27,8 @@ let package = Package(
         // Приложение SwiftUI.
         .executableTarget(name: "LeadGenerator", dependencies: ["LeadGenCore", "LeadSearch", "LeadCloud"]),
         .testTarget(name: "LeadGenCoreTests", dependencies: ["LeadGenCore", "LeadSearch"]),
+        // Интерфейс: состояние окон и меню, настройки внешнего вида, отрисовка экранов без сбоев.
+        .testTarget(name: "LeadGeneratorTests", dependencies: ["LeadGenerator", "LeadGenCore", "LeadSearch", "LeadCloud"]),
         .testTarget(name: "LeadCloudTests", dependencies: ["LeadCloud", "LeadGenCore"]),
     ]
 )
