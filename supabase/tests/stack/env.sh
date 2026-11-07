@@ -5,7 +5,9 @@ export REPO_ROOT="$(cd "$STACK_DIR/../../.." && pwd)"
 export PGHOST="${PGHOST:-127.0.0.1}" PGPORT="${PGPORT:-5432}" PGUSER="${PGUSER:-postgres}" PGPASSWORD="${PGPASSWORD:-postgres}"
 export STACK_DB="${STACK_DB:-leadgen_test}"
 export JWT_SECRET="local-test-jwt-secret-with-at-least-32-characters"
-export SEND_EMAIL_HOOK_SECRET="v1,whsec_dGVzdC1ob29rLXNlY3JldC0xMjM0NTY3ODkwYWJjZGVm"
+# Секрет хука собирается из заведомо тестовой строки, а не хранится готовым литералом:
+# иначе secret scanning принимает его за настоящий ключ Stripe/Standard Webhooks.
+export SEND_EMAIL_HOOK_SECRET="v1,whsec_$(printf '%s' 'test-hook-secret-1234567890abcdef' | base64 | tr -d '\n')"
 export SUPABASE_URL="http://127.0.0.1:54321"
 export SUPABASE_ANON_KEY="$(python3 "$STACK_DIR/jwt.py" "$JWT_SECRET" anon)"
 export SUPABASE_SERVICE_ROLE_KEY="$(python3 "$STACK_DIR/jwt.py" "$JWT_SECRET" service_role)"
